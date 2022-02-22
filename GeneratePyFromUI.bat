@@ -1,0 +1,1 @@
+pyuic5 -x UI.ui -o UI_Generated.py
