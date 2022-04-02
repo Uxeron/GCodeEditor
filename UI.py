@@ -40,15 +40,16 @@ class Ui_MainWindow(object):
 
         vertical_layout = QtWidgets.QVBoxLayout()
         vertical_layout.setSpacing(0)
-        self.slider_start = QtWidgets.QSlider(centralwidget)
-        self.slider_start.setOrientation(QtCore.Qt.Horizontal)
-        self.slider_start.setInvertedAppearance(True)
-        self.slider_start.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        vertical_layout.addWidget(self.slider_start)
-
         self.slider_end = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
         self.slider_end.setTickPosition(QtWidgets.QSlider.TicksAbove)
+        self.slider_end.setValue(100)
         vertical_layout.addWidget(self.slider_end)
+
+        self.slider_start = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
+        self.slider_start.setInvertedAppearance(True)
+        self.slider_start.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.slider_start.setValue(100)
+        vertical_layout.addWidget(self.slider_start)
 
         grid_layout.addLayout(vertical_layout, 2, 2, 1, 1)
 
@@ -111,9 +112,10 @@ class Ui_MainWindow(object):
         self.button_up.setMaximumSize(QtCore.QSize(30, 30))
         vertical_layout_2.addWidget(self.button_up)
 
-        self.verticalSlider = QtWidgets.QSlider(QtCore.Qt.Vertical, centralwidget)
-        self.verticalSlider.setTickPosition(QtWidgets.QSlider.TicksAbove)
-        vertical_layout_2.addWidget(self.verticalSlider)
+        self.slider_layer = QtWidgets.QSlider(QtCore.Qt.Vertical, centralwidget)
+        self.slider_layer.setTickPosition(QtWidgets.QSlider.TicksAbove)
+        self.slider_layer.setValue(100)
+        vertical_layout_2.addWidget(self.slider_layer)
 
         self.button_down = QtWidgets.QPushButton(centralwidget)
         self.button_down.setText("▼")
