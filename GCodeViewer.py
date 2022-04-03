@@ -13,7 +13,7 @@ def get_E(dist_x, dist_y, layer_height, extruder_width):
      return volume_flow / area * dist
     
 def main():
-    filename = "AI3M_JSBox_E0.6_L0.4_Fuzzy.gcode"
+    filename = "AI3M_3DBenchy.gcode"
 
     if not os.path.exists(filename):
         print("File does not exist")
@@ -34,19 +34,13 @@ def main():
 
     ui = MainWindow()
     ui.setup_ui()
-    ui.show()
 
     for index, layer in enumerate(model.layers):
         layer_item = ui.add_tree_item(ui.command_tree, "Layer " + str(index))
         for feature in layer.features:
             feature_item = ui.add_tree_item(layer_item, feature.name)
             for command in feature.commands:
-                if command.startswith("G0"):
-                    ui.add_tree_item(feature_item, command, "MAGENTA")
-                elif command.startswith("G1"):
-                    ui.add_tree_item(feature_item, command, "GREEN")
-                else:
-                    ui.add_tree_item(feature_item, command)
+                ui.add_tree_item(feature_item, command)
 
     sys.exit(app.exec_())
 

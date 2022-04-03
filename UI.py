@@ -2,6 +2,9 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt
 
+class LayerTreeItem(QtWidgets.QTreeWidgetItem):
+    pass
+
 class MainWindow():
     main_window: QtWidgets.QMainWindow
 
@@ -22,33 +25,91 @@ class MainWindow():
     action_file_save: QtWidgets.QAction
     action_file_saveas: QtWidgets.QAction
 
-    COLORS = {
-        "WHITE":QtGui.QBrush(QtGui.QColor("white")),
-        "BLACK":QtGui.QBrush(QtGui.QColor("black")),
-        "RED":QtGui.QBrush(QtGui.QColor("red")),
-        "GREEN":QtGui.QBrush(QtGui.QColor("green")),
-        "BLUE":QtGui.QBrush(QtGui.QColor("blue")),
-        "CYAN":QtGui.QBrush(QtGui.QColor("cyan")),
-        "MAGENTA":QtGui.QBrush(QtGui.QColor("magenta")),
-        "YELLOW":QtGui.QBrush(QtGui.QColor("yellow")),
-        "GRAY":QtGui.QBrush(QtGui.QColor("gray")),
-        }
+    open_layer_item: LayerTreeItem
 
-    def add_tree_item(self, parent: QtWidgets.QWidget, text: str, color: str = "") -> QtWidgets.QTreeWidgetItem:
-        item = QtWidgets.QTreeWidgetItem(parent)
+    COLORS = {
+        "WHITE"  : QtGui.QBrush(QtGui.QColor("white")),
+        "BLACK"  : QtGui.QBrush(QtGui.QColor("black")),
+        "RED"    : QtGui.QBrush(QtGui.QColor("red")),
+        "GREEN"  : QtGui.QBrush(QtGui.QColor("green")),
+        "BLUE"   : QtGui.QBrush(QtGui.QColor("blue")),
+        "CYAN"   : QtGui.QBrush(QtGui.QColor("cyan")),
+        "MAGENTA": QtGui.QBrush(QtGui.QColor("magenta")),
+        "YELLOW" : QtGui.QBrush(QtGui.QColor("yellow")),
+        "GRAY"   : QtGui.QBrush(QtGui.QColor("gray")),
+        }
+    
+    ### ================ S I G N A L   F U N C T I O N S ================ ###
+    
+    def remove_selected_items(self) -> None:
+        selected_items = self.command_tree.selectedItems()
+        root = self.command_tree.invisibleRootItem()
+
+        for item in selected_items:
+            (item.parent() or root).removeChild(item)
+    
+    def insert_new_item_under_selection(self) -> None:
+        if len(self.command_tree.selectedItems()) == 0:
+            return
+
+        root = self.command_tree.invisibleRootItem()
+
+        new_item = QtWidgets.QTreeWidgetItem()
+        new_item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
+        
+        selected_item = self.command_tree.selectedItems()[0]
+        parent = (selected_item.parent() or root)
+        item_index = parent.indexOfChild(selected_item) + 1
+        parent.insertChild(item_index, new_item)
+        self.command_tree.editItem(new_item)
+
+    def update_item(self, item: QtWidgets.QTreeWidgetItem) -> None:
+        if item.text(0).startswith("G0"):
+            item.setForeground(0, self.COLORS["MAGENTA"])
+        elif item.text(0).startswith("G1"):
+            item.setForeground(0, self.COLORS["GREEN"])
+        else:
+            item.setForeground(0, self.COLORS["WHITE"])
+    
+    def on_item_expanded(self, item: QtWidgets.QTreeWidgetItem) -> None:
+        if not isinstance(item, LayerTreeItem):
+            return
+        
+        if self.open_layer_item != None:
+            self.open_layer_item.setExpanded(False)
+        
+        self.open_layer_item = item
+    
+    def on_item_collapsed(self, item: QtWidgets.QTreeWidgetItem) -> None:
+        if not isinstance(item, LayerTreeItem):
+            return
+        
+        if self.open_layer_item != None:
+            self.open_layer_item.setExpanded(False)
+            self.open_layer_item = None
+
+    
+    
+    ### ================ P U B L I C   F U N C T I O N S ================ ###
+
+    def add_tree_item(self, parent: QtWidgets.QWidget, text: str) -> QtWidgets.QTreeWidgetItem:
+        item: QtWidgets.QTreeWidgetItem
+        if parent == self.command_tree:
+            item = LayerTreeItem(parent)
+        else:
+            item = QtWidgets.QTreeWidgetItem(parent)
+
+        item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
         item.setText(0, text)
-        if color != "":
-            item.setForeground(0, self.COLORS[color])
         
         return item
-
-    def show(self):
-        self.main_window.show()
 
     def setup_ui(self):
         self.main_window = QtWidgets.QMainWindow()
         self.main_window.setWindowTitle("GCode Editor")
         self.main_window.resize(1445, 1022)
+
+        self.open_layer_item = None
 
         for _, brush in self.COLORS.items():
             brush.setStyle(QtCore.Qt.SolidPattern)
@@ -161,7 +222,13 @@ class MainWindow():
         self.menu_file.addAction(self.action_file_saveas)
         menubar.addAction(self.menu_file.menuAction())
 
-        QtCore.QMetaObject.connectSlotsByName(self.main_window)
+        self.button_remove.pressed.connect(self.remove_selected_items)
+        self.button_insert.pressed.connect(self.insert_new_item_under_selection)
+        self.command_tree.itemChanged.connect(self.update_item)
+        self.command_tree.itemExpanded.connect(self.on_item_expanded)
+        self.command_tree.itemCollapsed.connect(self.on_item_collapsed)
+
+        self.main_window.show()
 
 class DarkPalette(QPalette):
     def __init__(self):
@@ -193,5 +260,4 @@ if __name__ == "__main__":
 
     ui = MainWindow()
     ui.setup_ui()
-    ui.show()
     sys.exit(app.exec_())
