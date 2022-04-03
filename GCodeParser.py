@@ -3,24 +3,34 @@ from io import TextIOWrapper
 
 class Feature:
     name: str
-    commands: list[str] = []
+    commands: list[str]
+
+    def __init__(self) -> None:
+        self.name = ""
+        self.commands = []
 
 
 class Layer:
-    features: list[Feature] = []
+    features: list[Feature]
+
+    def __init__(self) -> None:
+        self.features = []
 
 
 class Model:
-    feature_pre_print: Feature = Feature()
-    feature_post_print: Feature = Feature()
-    layers: list[Layer] = []
+    feature_pre_print: Feature
+    feature_post_print: Feature
+    layers: list[Layer]
 
     def get_layer_count(self) -> int:
         return len(self.layers)
 
     def __init__(self) -> None:
+        self.feature_pre_print = Feature()
         self.feature_pre_print.name = "PRE_PRINT"
-        self.feature_pre_print.name = "POST_PRINT"
+        self.feature_post_print = Feature()
+        self.feature_post_print.name = "POST_PRINT"
+        self.layers = []
 
 
 class GCodeParser:
@@ -57,7 +67,7 @@ class GCodeParser:
             self.current_feature = self.parsed_model.feature_post_print
     
     def start_feature(self, name: str) -> None:
-        if self.current_feature != None:
+        if self.current_feature != None and self.current_feature.name != "":
             self.current_layer.features.append(self.current_feature)
 
         self.current_feature = Feature()
@@ -79,7 +89,6 @@ class GCodeParser:
             return
 
         annotation_command, annotation_value = line[1::].split(":")
-        annotation_value = annotation_value.strip()
         if annotation_command in self.ANNOTATION_COMMANDS:
             self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value)
 
@@ -91,6 +100,7 @@ class GCodeParser:
         gcode_line = gcode_file.readline()
 
         while gcode_line != "":
+            gcode_line = gcode_line.strip()
             self.parse_line(gcode_line)
             gcode_line = gcode_file.readline()
         
