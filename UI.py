@@ -22,6 +22,26 @@ class MainWindow():
     action_file_save: QtWidgets.QAction
     action_file_saveas: QtWidgets.QAction
 
+    COLORS = {
+        "WHITE":QtGui.QBrush(QtGui.QColor("white")),
+        "BLACK":QtGui.QBrush(QtGui.QColor("black")),
+        "RED":QtGui.QBrush(QtGui.QColor("red")),
+        "GREEN":QtGui.QBrush(QtGui.QColor("green")),
+        "BLUE":QtGui.QBrush(QtGui.QColor("blue")),
+        "CYAN":QtGui.QBrush(QtGui.QColor("cyan")),
+        "MAGENTA":QtGui.QBrush(QtGui.QColor("magenta")),
+        "YELLOW":QtGui.QBrush(QtGui.QColor("yellow")),
+        "GRAY":QtGui.QBrush(QtGui.QColor("gray")),
+        }
+
+    def add_tree_item(self, parent: QtWidgets.QWidget, text: str, color: str = "") -> QtWidgets.QTreeWidgetItem:
+        item = QtWidgets.QTreeWidgetItem(parent)
+        item.setText(0, text)
+        if color != "":
+            item.setForeground(0, self.COLORS[color])
+        
+        return item
+
     def show(self):
         self.main_window.show()
 
@@ -29,6 +49,9 @@ class MainWindow():
         self.main_window = QtWidgets.QMainWindow()
         self.main_window.setWindowTitle("GCode Editor")
         self.main_window.resize(1445, 1022)
+
+        for _, brush in self.COLORS.items():
+            brush.setStyle(QtCore.Qt.SolidPattern)
 
         centralwidget = QtWidgets.QWidget(self.main_window)
 
@@ -59,21 +82,9 @@ class MainWindow():
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
         self.command_tree.setSizePolicy(size_policy)
         self.command_tree.setMinimumSize(QtCore.QSize(400, 0))
-        self.command_tree.setDragEnabled(True)
-        self.command_tree.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.command_tree.setAlternatingRowColors(True)
         self.command_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.command_tree.header().setVisible(False)
-
-        ### <---- Add test items, remove later
-        item_0 = QtWidgets.QTreeWidgetItem(self.command_tree)
-        item_1 = QtWidgets.QTreeWidgetItem(item_0)
-        item_0.setText(0, "Layer 0")
-        item_1.setText(0, "G1 F1200 X52.866 Y88.433 E0.1115")
-        brush = QtGui.QBrush(QtGui.QColor(0, 170, 0))
-        brush.setStyle(QtCore.Qt.SolidPattern)
-        item_1.setForeground(0, brush)
-        ### ---->
 
         grid_layout.addWidget(self.command_tree, 0, 0, 2, 1)
 
@@ -89,7 +100,7 @@ class MainWindow():
         size_policy.setVerticalStretch(0)
         size_policy.setHeightForWidth(self.button_remove.sizePolicy().hasHeightForWidth())
         self.button_remove.setSizePolicy(size_policy)
-        self.button_remove.setMinimumSize(QtCore.QSize(50, 22))
+        self.button_remove.setMinimumSize(QtCore.QSize(50, 50))
         self.button_remove.setMaximumSize(QtCore.QSize(50, 50))
         self.button_remove.setBaseSize(QtCore.QSize(50, 50))
         horizontal_layout.addWidget(self.button_remove)
@@ -101,7 +112,7 @@ class MainWindow():
         size_policy.setVerticalStretch(0)
         size_policy.setHeightForWidth(self.button_insert.sizePolicy().hasHeightForWidth())
         self.button_insert.setSizePolicy(size_policy)
-        self.button_insert.setMinimumSize(QtCore.QSize(50, 22))
+        self.button_insert.setMinimumSize(QtCore.QSize(50, 50))
         self.button_insert.setMaximumSize(QtCore.QSize(50, 50))
         self.button_insert.setBaseSize(QtCore.QSize(50, 50))
         horizontal_layout.addWidget(self.button_insert)

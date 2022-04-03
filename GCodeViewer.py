@@ -1,54 +1,53 @@
-from io import TextIOWrapper
 import matplotlib
 import os
+from GCodeParser import Feature, Layer, Model, GCodeParser
+from UI import DarkPalette, MainWindow
+from PyQt5 import QtWidgets
+from PyQt5.QtWidgets import QStyleFactory
+import sys
 
-class Feature:
-    name: str
-    commands: list[str] = []
-
-
-class Layer:
-    index: int
-    features: list[Feature] = []
-
-
-
-def get_E(dist_x, dist_y, layer_thickness, extruder_width):
+def get_E(dist_x, dist_y, layer_height, extruder_width):
      dist = (dist_x**2 + dist_y**2)**0.5
-     volume_flow = layer_thickness * extruder_width
+     volume_flow = layer_height * extruder_width
      area = 3.14159265359 * (1.75/2.0)**2
      return volume_flow / area * dist
-
-
-
-
-def main(gcode_file: TextIOWrapper) -> None:
-    gcode = gcode_file.read()
-
-
-
     
-def init():
-    #filename = input("Enter gcode file name: ")
+def main():
     filename = "AI3M_JSBox_E0.6_L0.4_Fuzzy.gcode"
 
     if not os.path.exists(filename):
         print("File does not exist")
         return
 
+    model: Model
+
     with open(filename, "r") as file:
-        main(file)
+        parser = GCodeParser()
+        model = parser.parse(file)
+        print(model.get_layer_count())
+    
 
-init()
+    app = QtWidgets.QApplication(sys.argv)
 
+    app.setStyle(QStyleFactory.create("Fusion"))
+    app.setPalette(DarkPalette())
 
-#import sys
- #   from PyQt5.QtCore import QFile, QTextStream
-  #  import breeze_resources
+    ui = MainWindow()
+    ui.setup_ui()
+    ui.show()
 
-   # app = QtWidgets.QApplication(sys.argv)
+    for index, layer in enumerate(model.layers):
+        layer_item = ui.add_tree_item(ui.command_tree, "Layer " + str(index))
+        for feature in layer.features:
+            feature_item = ui.add_tree_item(layer_item, feature.name)
+            for command in feature.commands:
+                if command.startswith("G0"):
+                    ui.add_tree_item(feature_item, command, "MAGENTA")
+                elif command.startswith("G1"):
+                    ui.add_tree_item(feature_item, command, "GREEN")
+                else:
+                    ui.add_tree_item(feature_item, command)
 
-    #file = QFile("dark.qss")
-    #file.open(QFile.ReadOnly | QFile.Text)
-    #stream = QTextStream(file)
-    #app.setStyleSheet(stream.readAll())
+    sys.exit(app.exec_())
+
+main()
