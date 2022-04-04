@@ -3,7 +3,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
 class LayerTreeItem(QtWidgets.QTreeWidgetItem):
-    pass
+    command_count = 0
 
 class MainWindow():
     main_window: QtWidgets.QMainWindow
@@ -26,11 +26,12 @@ class MainWindow():
     action_file_saveas: QtWidgets.QAction
 
     open_layer_item: LayerTreeItem
+    layer_count: int
 
     COLORS = {
         "WHITE"  : QtGui.QBrush(QtGui.QColor("white")),
         "BLACK"  : QtGui.QBrush(QtGui.QColor("black")),
-        "RED"    : QtGui.QBrush(QtGui.QColor("red")),
+        "RED"    : QtGui.QBrush(QtGui.QColor(255, 100, 100)),
         "GREEN"  : QtGui.QBrush(QtGui.QColor("green")),
         "BLUE"   : QtGui.QBrush(QtGui.QColor(100, 100, 255)),
         "CYAN"   : QtGui.QBrush(QtGui.QColor("cyan")),
@@ -79,11 +80,15 @@ class MainWindow():
         if not isinstance(item, LayerTreeItem):
             return
         
+        if (item == self.open_layer_item):
+            return
+        
         if self.open_layer_item != None:
             self.open_layer_item.setExpanded(False)
         
         self.open_layer_item = item
         self.command_tree.scrollToItem(item, QtWidgets.QAbstractItemView.ScrollHint.PositionAtTop)
+        self.slider_layer.setValue(self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(item))
     
     def on_item_collapsed(self, item: QtWidgets.QTreeWidgetItem) -> None:
         if not isinstance(item, LayerTreeItem):
@@ -93,7 +98,14 @@ class MainWindow():
             self.open_layer_item.setExpanded(False)
             self.open_layer_item = None
 
+    def on_button_down_pressed(self):
+        self.slider_layer.setValue(self.slider_layer.value() - 1)
     
+    def on_button_up_pressed(self):
+        self.slider_layer.setValue(self.slider_layer.value() + 1)
+    
+    def on_slider_value_changed(self, value):
+        self.command_tree.invisibleRootItem().child(self.layer_count - value).setExpanded(True)
     
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
@@ -108,6 +120,11 @@ class MainWindow():
         item.setText(0, text)
         
         return item
+    
+    def set_layer_count(self, count: int):
+        self.layer_count = count
+        self.slider_layer.setMaximum(count - 1)
+        self.slider_layer.setValue(count - 1)
 
     def setup_ui(self):
         self.main_window = QtWidgets.QMainWindow()
@@ -228,9 +245,12 @@ class MainWindow():
 
         self.button_remove.pressed.connect(self.remove_selected_items)
         self.button_insert.pressed.connect(self.insert_new_item_under_selection)
+        self.button_down.pressed.connect(self.on_button_down_pressed)
+        self.button_up.pressed.connect(self.on_button_up_pressed)
         self.command_tree.itemChanged.connect(self.update_item)
         self.command_tree.itemExpanded.connect(self.on_item_expanded)
         self.command_tree.itemCollapsed.connect(self.on_item_collapsed)
+        self.slider_layer.valueChanged.connect(self.on_slider_value_changed)
 
         self.main_window.show()
 

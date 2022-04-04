@@ -24,8 +24,6 @@ def main():
     with open(filename, "r") as file:
         parser = GCodeParser()
         model = parser.parse(file)
-        print(model.get_layer_count())
-    
 
     app = QtWidgets.QApplication(sys.argv)
 
@@ -35,20 +33,22 @@ def main():
     ui = MainWindow()
     ui.setup_ui()
 
-    pre_print_layer_item = ui.add_tree_item(ui.command_tree, "Pre-Print")
-    for command in model.feature_pre_print.commands:
-        ui.add_tree_item(pre_print_layer_item, command)
+    post_print_layer_item = ui.add_tree_item(ui.command_tree, "Post-Print")
+    for command in model.feature_post_print.commands:
+        ui.add_tree_item(post_print_layer_item, command)
 
-    for index, layer in enumerate(model.layers):
+    for index, layer in reversed(list(enumerate(model.layers))):
         layer_item = ui.add_tree_item(ui.command_tree, "Layer " + str(index))
         for feature in layer.features:
             feature_item = ui.add_tree_item(layer_item, feature.name)
             for command in feature.commands:
                 ui.add_tree_item(feature_item, command)
-    
-    post_print_layer_item = ui.add_tree_item(ui.command_tree, "Post-Print")
-    for command in model.feature_post_print.commands:
-        ui.add_tree_item(post_print_layer_item, command)
+
+    pre_print_layer_item = ui.add_tree_item(ui.command_tree, "Pre-Print")
+    for command in model.feature_pre_print.commands:
+        ui.add_tree_item(pre_print_layer_item, command)
+
+    ui.set_layer_count(model.get_layer_count())
 
     sys.exit(app.exec_())
 
