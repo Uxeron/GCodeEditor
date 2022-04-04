@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import Qt
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 
 class LayerTreeItem(QtWidgets.QTreeWidgetItem):
     pass
@@ -70,6 +70,8 @@ class MainWindow():
             item.setForeground(0, self.COLORS["BLUE"])
         elif item.text(0).startswith(";"):
             item.setForeground(0, self.COLORS["GREEN"])
+        elif item.text(0).startswith("M"):
+            item.setForeground(0, self.COLORS["RED"])
         else:
             item.setForeground(0, self.COLORS["WHITE"])
     
@@ -81,6 +83,7 @@ class MainWindow():
             self.open_layer_item.setExpanded(False)
         
         self.open_layer_item = item
+        self.command_tree.scrollToItem(item, QtWidgets.QAbstractItemView.ScrollHint.PositionAtTop)
     
     def on_item_collapsed(self, item: QtWidgets.QTreeWidgetItem) -> None:
         if not isinstance(item, LayerTreeItem):
