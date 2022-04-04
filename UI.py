@@ -32,7 +32,7 @@ class MainWindow():
         "BLACK"  : QtGui.QBrush(QtGui.QColor("black")),
         "RED"    : QtGui.QBrush(QtGui.QColor("red")),
         "GREEN"  : QtGui.QBrush(QtGui.QColor("green")),
-        "BLUE"   : QtGui.QBrush(QtGui.QColor("blue")),
+        "BLUE"   : QtGui.QBrush(QtGui.QColor(100, 100, 255)),
         "CYAN"   : QtGui.QBrush(QtGui.QColor("cyan")),
         "MAGENTA": QtGui.QBrush(QtGui.QColor("magenta")),
         "YELLOW" : QtGui.QBrush(QtGui.QColor("yellow")),
@@ -67,6 +67,8 @@ class MainWindow():
         if item.text(0).startswith("G0"):
             item.setForeground(0, self.COLORS["MAGENTA"])
         elif item.text(0).startswith("G1"):
+            item.setForeground(0, self.COLORS["BLUE"])
+        elif item.text(0).startswith(";"):
             item.setForeground(0, self.COLORS["GREEN"])
         else:
             item.setForeground(0, self.COLORS["WHITE"])
@@ -143,7 +145,6 @@ class MainWindow():
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
         self.command_tree.setSizePolicy(size_policy)
         self.command_tree.setMinimumSize(QtCore.QSize(400, 0))
-        self.command_tree.setAlternatingRowColors(True)
         self.command_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.command_tree.header().setVisible(False)
 

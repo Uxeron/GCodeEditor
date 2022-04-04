@@ -86,11 +86,13 @@ class GCodeParser:
             return
 
         if len(line[1::].split(":")) != 2:
+            self.current_feature.commands.append(line)
             return
 
         annotation_command, annotation_value = line[1::].split(":")
         if annotation_command in self.ANNOTATION_COMMANDS:
             self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value)
+        self.current_feature.commands.append(line)
 
 
     def parse(self, gcode_file: TextIOWrapper) -> Model:

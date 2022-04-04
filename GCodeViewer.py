@@ -35,12 +35,22 @@ def main():
     ui = MainWindow()
     ui.setup_ui()
 
+    pre_print_layer_item = ui.add_tree_item(ui.command_tree, "Pre-Print")
+    pre_print_feature_item = ui.add_tree_item(pre_print_layer_item, "Pre-Print")
+    for command in model.feature_pre_print.commands:
+        ui.add_tree_item(pre_print_feature_item, command)
+
     for index, layer in enumerate(model.layers):
         layer_item = ui.add_tree_item(ui.command_tree, "Layer " + str(index))
         for feature in layer.features:
             feature_item = ui.add_tree_item(layer_item, feature.name)
             for command in feature.commands:
                 ui.add_tree_item(feature_item, command)
+    
+    post_print_layer_item = ui.add_tree_item(ui.command_tree, "Post-Print")
+    post_print_feature_item = ui.add_tree_item(post_print_layer_item, "Post-Print")
+    for command in model.feature_post_print.commands:
+        ui.add_tree_item(post_print_feature_item, command)
 
     sys.exit(app.exec_())
 
