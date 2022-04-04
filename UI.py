@@ -2,19 +2,44 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
+from GCodeParser import Feature, Layer, Model, GCodeParser
+from io import TextIOWrapper
+import numpy as np
+
+import matplotlib
+from matplotlib.axes import Axes
+matplotlib.use('Qt5Agg')
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+from matplotlib.collections import LineCollection
+
+class MplCanvas(FigureCanvasQTAgg):
+    axes: Axes
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
+        self.axes = fig.add_subplot(111)
+        super(MplCanvas, self).__init__(fig)
+
 class LayerTreeItem(QtWidgets.QTreeWidgetItem):
     command_count = 0
 
 class MainWindow():
     main_window: QtWidgets.QMainWindow
 
-    image:  QtWidgets.QLabel
+    model: Model = None
+    gcode_render: MplCanvas
+    model_render_reference: LineCollection = None
+
     command_tree: QtWidgets.QTreeWidget
 
     slider_layer: QtWidgets.QSlider
     slider_start: QtWidgets.QSlider
     slider_end: QtWidgets.QSlider
 
+    button_zoom_in: QtWidgets.QPushButton
+    button_zoom_out: QtWidgets.QPushButton
     button_insert: QtWidgets.QPushButton
     button_remove: QtWidgets.QPushButton
     button_up: QtWidgets.QPushButton
@@ -27,6 +52,10 @@ class MainWindow():
 
     open_layer_item: LayerTreeItem
     layer_count: int
+
+    printer_size_x: int = 210
+    printer_size_y: int = 210
+    zoom: float = 0.0
 
     COLORS = {
         "WHITE"  : QtGui.QBrush(QtGui.QColor("white")),
@@ -88,7 +117,9 @@ class MainWindow():
         
         self.open_layer_item = item
         self.command_tree.scrollToItem(item, QtWidgets.QAbstractItemView.ScrollHint.PositionAtTop)
-        self.slider_layer.setValue(self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(item))
+        current_layer = self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(item)
+        self.slider_layer.setValue(current_layer)
+        self.render_layer(current_layer)
     
     def on_item_collapsed(self, item: QtWidgets.QTreeWidgetItem) -> None:
         if not isinstance(item, LayerTreeItem):
@@ -106,6 +137,23 @@ class MainWindow():
     
     def on_slider_value_changed(self, value):
         self.command_tree.invisibleRootItem().child(self.layer_count - value).setExpanded(True)
+    
+    def on_button_zoom_in_pressed(self):
+        self.update_render_zoom(self.zoom + 0.1)
+    
+    def on_button_zoom_out_pressed(self):
+        self.update_render_zoom(self.zoom - 0.1)
+    
+    def open_file_dialog(self):
+        options = QtWidgets.QFileDialog.Options()
+        options |= QtWidgets.QFileDialog.DontUseNativeDialog
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_window, "Select GCode", "","GCode Files (*.gcode);;All Files (*)", options=options)
+
+        if not filename:
+            return
+        
+        with open(filename, "r") as file:
+            self.parse_and_fill_model(file)
     
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
@@ -125,6 +173,117 @@ class MainWindow():
         self.layer_count = count
         self.slider_layer.setMaximum(count - 1)
         self.slider_layer.setValue(count - 1)
+    
+    def update_render_zoom(self, zoom):
+        if not 0.0 < zoom < 1.0:
+            return
+
+        self.zoom = zoom
+        self.gcode_render.axes.set_xlim([self.printer_size_x / 2.0 * self.zoom, self.printer_size_x - self.printer_size_x / 2.0 * self.zoom])
+        self.gcode_render.axes.set_ylim([self.printer_size_y / 2.0 * self.zoom, self.printer_size_y - self.printer_size_y / 2.0 * self.zoom])
+        self.gcode_render.draw()
+    
+    def parse_and_fill_model(self, gcode_file: TextIOWrapper):
+        self.command_tree.clear()
+        self.open_layer_item = None
+
+        parser = GCodeParser()
+        self.model = parser.parse(gcode_file)
+
+        post_print_layer_item = self.add_tree_item(self.command_tree, "Post-Print")
+        for command in self.model.feature_post_print.commands:
+            self.add_tree_item(post_print_layer_item, command)
+
+        for index, layer in reversed(list(enumerate(self.model.layers))):
+            layer_item = self.add_tree_item(self.command_tree, "Layer " + str(index))
+            for feature in layer.features:
+                feature_item = self.add_tree_item(layer_item, feature.name)
+                for command in feature.commands:
+                    self.add_tree_item(feature_item, command)
+
+        pre_print_layer_item = self.add_tree_item(self.command_tree, "Pre-Print")
+        for command in self.model.feature_pre_print.commands:
+            self.add_tree_item(pre_print_layer_item, command)
+        
+        self.set_layer_count(self.model.get_layer_count())
+    
+    def render_layer(self, layer: int):
+        if self.model == None:
+            return
+
+        x_coords = []
+        y_coords = []
+        colors = []
+
+        if layer == 0:
+            x_coords.append(0.0)
+            y_coords.append(0.0)
+        else:
+            found =  False
+            for feature in self.model.layers[layer - 1].features:
+                if found: break
+
+                for command in feature.commands:
+                    if found: break
+
+                    parts = command.split(" ")
+                    command_x: float = None
+                    command_y: float = None
+                    command_color: str = None
+
+                    for part in parts:
+                        if part.startswith("X"):
+                            command_x = float(part[1::])
+                        elif part.startswith("Y"):
+                            command_y = float(part[1::])
+                        elif part == "G1":
+                            command_color = "blue"
+                        elif part == "G0":
+                            command_color = "red"
+                    
+                    if command_x != None and command_y != None and command_color != None:
+                        x_coords.append(command_x)
+                        y_coords.append(command_y)
+                        found = True
+
+        for feature in self.model.layers[layer].features:
+            for command in feature.commands:
+                parts = command.split(" ")
+                command_x: float = None
+                command_y: float = None
+                command_color: str = None
+
+                for part in parts:
+                    if part.startswith("X"):
+                        command_x = float(part[1::])
+                    elif part.startswith("Y"):
+                        command_y = float(part[1::])
+                    elif part == "G1":
+                        command_color = "blue"
+                    elif part == "G0":
+                        command_color = "red"
+                
+                if command_x != None and command_y != None and command_color != None:
+                    x_coords.append(command_x)
+                    y_coords.append(command_y)
+                    colors.append(command_color)
+        
+        x_coords_array = np.array(x_coords)
+        y_coords_array = np.array(y_coords)
+        colors_array = np.array(colors)
+
+        points = np.array([x_coords_array, y_coords_array]).T.reshape(-1, 1, 2)
+        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+        lc = LineCollection(segments, colors=colors_array)
+
+        self.gcode_render.axes.cla()
+        self.gcode_render.axes.set_xlim([0, self.printer_size_x])
+        self.gcode_render.axes.set_ylim([0, self.printer_size_y])
+        self.gcode_render.axes.set_aspect('equal')
+        self.gcode_render.axes.add_collection(lc)
+        self.gcode_render.draw()
+        self.update_render_zoom(self.zoom)
 
     def setup_ui(self):
         self.main_window = QtWidgets.QMainWindow()
@@ -140,23 +299,23 @@ class MainWindow():
 
         grid_layout = QtWidgets.QGridLayout(centralwidget)
 
-        self.image = QtWidgets.QLabel(centralwidget)
-        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.image.setSizePolicy(size_policy)
-        self.image.setPixmap(QtGui.QPixmap("DefaultImage.png"))
-        grid_layout.addWidget(self.image, 0, 2, 1, 1)
+        self.gcode_render = MplCanvas(self, width=5, height=5, dpi=100)
+        self.gcode_render.axes.set_xlim([0, self.printer_size_x])
+        self.gcode_render.axes.set_ylim([0, self.printer_size_y])
+        self.gcode_render.axes.set_aspect('equal')
+        grid_layout.addWidget(self.gcode_render, 0, 2, 1, 1)
 
         vertical_layout = QtWidgets.QVBoxLayout()
         vertical_layout.setSpacing(0)
         self.slider_end = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
         self.slider_end.setTickPosition(QtWidgets.QSlider.TicksAbove)
-        self.slider_end.setValue(100)
+        self.slider_end.setMaximum(0)
         vertical_layout.addWidget(self.slider_end)
 
         self.slider_start = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
         self.slider_start.setInvertedAppearance(True)
         self.slider_start.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider_start.setValue(100)
+        self.slider_start.setMaximum(0)
         vertical_layout.addWidget(self.slider_start)
 
         grid_layout.addLayout(vertical_layout, 2, 2, 1, 1)
@@ -176,7 +335,7 @@ class MainWindow():
         horizontal_layout.addItem(spacerItem)
 
         self.button_remove = QtWidgets.QPushButton(centralwidget)
-        self.button_remove.setText("-")
+        self.button_remove.setText("Remove")
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         size_policy.setHorizontalStretch(0)
         size_policy.setVerticalStretch(0)
@@ -188,7 +347,7 @@ class MainWindow():
         horizontal_layout.addWidget(self.button_remove)
 
         self.button_insert = QtWidgets.QPushButton(centralwidget)
-        self.button_insert.setText("+")
+        self.button_insert.setText("Insert")
         size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         size_policy.setHorizontalStretch(0)
         size_policy.setVerticalStretch(0)
@@ -201,6 +360,18 @@ class MainWindow():
         grid_layout.addLayout(horizontal_layout, 2, 0, 1, 1)
         vertical_layout_2 = QtWidgets.QVBoxLayout()
 
+        self.button_zoom_in = QtWidgets.QPushButton(centralwidget)
+        self.button_zoom_in.setText("+")
+        self.button_zoom_in.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_zoom_in.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_zoom_in)
+
+        self.button_zoom_out = QtWidgets.QPushButton(centralwidget)
+        self.button_zoom_out.setText("-")
+        self.button_zoom_out.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_zoom_out.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_zoom_out)
+
         self.button_up = QtWidgets.QPushButton(centralwidget)
         self.button_up.setText("▲")
         self.button_up.setMinimumSize(QtCore.QSize(30, 30))
@@ -209,7 +380,7 @@ class MainWindow():
 
         self.slider_layer = QtWidgets.QSlider(QtCore.Qt.Vertical, centralwidget)
         self.slider_layer.setTickPosition(QtWidgets.QSlider.TicksAbove)
-        self.slider_layer.setValue(100)
+        self.slider_layer.setMaximum(0)
         vertical_layout_2.addWidget(self.slider_layer)
 
         self.button_down = QtWidgets.QPushButton(centralwidget)
@@ -251,6 +422,9 @@ class MainWindow():
         self.command_tree.itemExpanded.connect(self.on_item_expanded)
         self.command_tree.itemCollapsed.connect(self.on_item_collapsed)
         self.slider_layer.valueChanged.connect(self.on_slider_value_changed)
+        self.button_zoom_in.pressed.connect(self.on_button_zoom_in_pressed)
+        self.button_zoom_out.pressed.connect(self.on_button_zoom_out_pressed)
+        self.action_file_open.triggered.connect(self.open_file_dialog)
 
         self.main_window.show()
 
