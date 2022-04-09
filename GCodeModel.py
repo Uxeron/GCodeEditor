@@ -1,39 +1,133 @@
+from __future__ import annotations
 from io import TextIOWrapper
 
 
-class Feature:
+class Child:
+    parent: Parent
+
+    def __init__(self, parent: Parent, **kwargs) -> None:
+        self.parent = parent
+        super().__init__(**kwargs)
+
+    def remove_from_parent(self) -> None:
+        self.parent.remove_child(self)
+
+
+class Parent:
+    children: list[Child]
+
+    def __init__(self, **kwargs) -> None:
+        self.children = []
+        super().__init__(**kwargs)
+
+    def remove_child(self, child: Child) -> None:
+        self.children.remove(child)
+
+
+class Command(Child):
+    command: str
+    is_move_command: bool
+    x: float
+    y: float
+    color: str
+
+    def __init__(self, parent: Feature, command: str) -> None:
+        super().__init__(parent=parent)
+        self.is_move_command = False
+        self.x = None
+        self.y = None
+
+        self.parse_command(command)
+
+    def parse_command(self, command: str) -> None:
+        self.command = command
+        command_parts = command.split(" ")
+
+        match command_parts[0]:
+            case "G0":
+                self.color = "red"
+            case "G1":
+                self.color = "blue"
+            case _:
+                return # Not a move command, no need to continue parsing
+
+        # Parts can go in any order, need to check all of them
+        for part in command_parts:
+            if part.startswith("X"):
+                self.x = float(part[1::])
+            elif part.startswith("Y"):
+                self.y = float(part[1::])
+        
+        # Move command must have both X and Y parts
+        self.is_move_command = (self.x != None and self.y != None)
+
+
+class Feature(Child, Parent):
     name: str
-    commands: list[str]
 
-    def __init__(self) -> None:
-        self.name = ""
-        self.commands = []
+    def __init__(self, parent: Layer, name: str) -> None:
+        super().__init__(parent=parent)
+        self.name = name
+    
+    def add_command(self, command: str) -> None:
+        self.children.append(Command(self, command))
+    
+    def get_command(self, index: int) -> Command:
+        return self.children[index]
+
+    def get_commands(self) -> list[Command]:
+        return self.children
+    
+    def command_count(self) -> int:
+        return len(self.children)
 
 
-class Layer:
+class Layer(Child, Parent):
     features: list[Feature]
 
-    def __init__(self) -> None:
-        self.features = []
+    def __init__(self, parent: Model):
+        super().__init__(parent=parent)
+    
+    def add_feature(self, feature: Feature):
+        self.children.append(feature)
+    
+    def get_feature(self, index: int) -> Feature:
+        return self.children[index]
+    
+    def get_features(self) -> list[Feature]:
+        return self.children
+    
+    def feature_count(self) -> int:
+        return len(self.children)
 
 
-class Model:
+class Model(Parent):
     feature_pre_print: Feature
     feature_post_print: Feature
-    layers: list[Layer]
-
-    def get_layer_count(self) -> int:
-        return len(self.layers)
 
     def __init__(self) -> None:
-        self.feature_pre_print = Feature()
-        self.feature_pre_print.name = "PRE_PRINT"
-        self.feature_post_print = Feature()
-        self.feature_post_print.name = "POST_PRINT"
-        self.layers = []
+        super().__init__()
+        self.feature_pre_print = Feature(self, "PRE_PRINT")
+        self.feature_post_print = Feature(self, "POST_PRINT")
+
+    def add_layer(self, layer: Layer) -> None:
+        self.children.append(layer)
+    
+    def get_layer(self, index: int) -> Layer:
+        return self.children[index]
+    
+    def get_layers(self) -> list[Layer]:
+        return self.children
+
+    def layer_count(self) -> int:
+        return len(self.children)
+    
+    def parse_gcode(gcode_file: TextIOWrapper) -> Model:
+        parser = _GCodeParser()
+        return parser.parse(gcode_file)
 
 
-class GCodeParser:
+class _GCodeParser:
     FEATURE_TYPES = ("FILL", "SKIN", "SKIRT", "SUPPORT", "SUPPORT-INTERFACE", "WALL-INNER", "WALL-OUTER")
 
     parsed_model: Model
@@ -49,29 +143,23 @@ class GCodeParser:
         self.layer_count = int(count)
 
     def start_layer(self, _) -> None:
-        if self.state_pre_print:
-            self.state_pre_print = False
-            self.current_feature = Feature()
-            self.current_feature.name = "LAYER_START"
-
-        self.current_layer = Layer()
+        self.current_layer = Layer(self.parsed_model)
+        self.current_feature = Feature(self.current_layer, "LAYER_START")
     
     def end_layer(self, _) -> None:
-        self.current_layer.features.append(self.current_feature)
-        self.current_feature = Feature()
-        self.parsed_model.layers.append(self.current_layer)
-        self.current_layer = Layer()
-
-        if self.parsed_model.get_layer_count() == self.layer_count:
-            self.state_post_print = True
-            self.current_feature = self.parsed_model.feature_post_print
+        self.current_layer.add_feature(self.current_feature)
+        self.parsed_model.add_layer(self.current_layer)
     
     def start_feature(self, name: str) -> None:
-        if self.current_feature != None and self.current_feature.name != "":
-            self.current_layer.features.append(self.current_feature)
+        if self.parsed_model.layer_count() == self.layer_count:
+            self.current_feature = self.parsed_model.feature_post_print
+            return
 
-        self.current_feature = Feature()
-        self.current_feature.name = name
+        # If we are already working with a feature, end it
+        if self.current_feature != None:
+            self.current_layer.add_feature(self.current_feature)
+
+        self.current_feature = Feature(self.current_layer, name)
     
     def start_mesh(self, name: str) -> None:
         if name == "NONMESH":
@@ -79,21 +167,22 @@ class GCodeParser:
 
     ANNOTATION_COMMANDS = {"LAYER_COUNT":set_layer_count, "LAYER":start_layer, "TIME_ELAPSED":end_layer, "TYPE":start_feature, "MESH":start_mesh}
 
-
     def parse_line(self, line: str) -> None:
+        # Commands
         if not line.startswith(";"):
-            self.current_feature.commands.append(line)
+            self.current_feature.add_command(line)
             return
 
+        # Comments
         if len(line[1::].split(":")) != 2:
-            self.current_feature.commands.append(line)
+            self.current_feature.add_command(line)
             return
 
+        # Command comments
         annotation_command, annotation_value = line[1::].split(":")
         if annotation_command in self.ANNOTATION_COMMANDS:
             self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value)
-        self.current_feature.commands.append(line)
-
+        self.current_feature.add_command(line)
 
     def parse(self, gcode_file: TextIOWrapper) -> Model:
         self.parsed_model = Model()
