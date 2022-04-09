@@ -2,7 +2,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-from GCodeParser import Feature, Layer, Model, GCodeParser
+from GCodeModel import Model, Layer, Child
 from io import TextIOWrapper
 import numpy as np
 
@@ -22,8 +22,16 @@ class MplCanvas(FigureCanvasQTAgg):
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
-class LayerTreeItem(QtWidgets.QTreeWidgetItem):
-    command_count = 0
+class ReferenceTreeWidgetItem(QtWidgets.QTreeWidgetItem):
+    model_reference: Child
+
+    def __init__(self, parent, model_reference: Child) -> None:
+        super().__init__(parent)
+        self.model_reference = model_reference
+
+class LayerTreeItem(ReferenceTreeWidgetItem):
+    def __init__(self, parent, model_reference: Layer) -> None:
+        super().__init__(parent, model_reference)
 
 class MainWindow():
     main_window: QtWidgets.QMainWindow
@@ -157,12 +165,12 @@ class MainWindow():
     
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
-    def add_tree_item(self, parent: QtWidgets.QWidget, text: str) -> QtWidgets.QTreeWidgetItem:
-        item: QtWidgets.QTreeWidgetItem
+    def add_tree_item(self, parent: QtWidgets.QWidget, modelItem: Child, text: str) -> ReferenceTreeWidgetItem:
+        item: ReferenceTreeWidgetItem
         if parent == self.command_tree:
-            item = LayerTreeItem(parent)
+            item = LayerTreeItem(parent, modelItem)
         else:
-            item = QtWidgets.QTreeWidgetItem(parent)
+            item = ReferenceTreeWidgetItem(parent, modelItem)
 
         item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
         item.setText(0, text)
@@ -172,7 +180,7 @@ class MainWindow():
     def set_layer_count(self, count: int):
         self.layer_count = count
         self.slider_layer.setMaximum(count - 1)
-        self.slider_layer.setValue(count - 1)
+        self.slider_layer.setValue(0)
     
     def update_render_zoom(self, zoom):
         if not 0.0 < zoom < 1.0:
@@ -187,87 +195,59 @@ class MainWindow():
         self.command_tree.clear()
         self.open_layer_item = None
 
-        parser = GCodeParser()
-        self.model = parser.parse(gcode_file)
+        self.model = Model.parse_gcode(gcode_file)
 
-        post_print_layer_item = self.add_tree_item(self.command_tree, "Post-Print")
-        for command in self.model.feature_post_print.commands:
-            self.add_tree_item(post_print_layer_item, command)
+        post_print_layer_item = self.add_tree_item(self.command_tree, self.model.feature_post_print, "Post-Print")
+        for command in self.model.feature_post_print.get_commands():
+            self.add_tree_item(post_print_layer_item, command, command.command)
 
-        for index, layer in reversed(list(enumerate(self.model.layers))):
-            layer_item = self.add_tree_item(self.command_tree, "Layer " + str(index))
-            for feature in layer.features:
-                feature_item = self.add_tree_item(layer_item, feature.name)
-                for command in feature.commands:
-                    self.add_tree_item(feature_item, command)
+        for index, layer in reversed(list(enumerate(self.model.get_layers()))):
+            layer_item = self.add_tree_item(self.command_tree, layer, "Layer " + str(index))
+            for feature in layer.get_features():
+                feature_item = self.add_tree_item(layer_item, feature, feature.name)
+                for command in feature.get_commands():
+                    self.add_tree_item(feature_item, command, command.command)
 
-        pre_print_layer_item = self.add_tree_item(self.command_tree, "Pre-Print")
-        for command in self.model.feature_pre_print.commands:
-            self.add_tree_item(pre_print_layer_item, command)
+        pre_print_layer_item = self.add_tree_item(self.command_tree, self.model.feature_pre_print, "Pre-Print")
+        for command in self.model.feature_pre_print.get_commands():
+            self.add_tree_item(pre_print_layer_item, command, command.command)
         
-        self.set_layer_count(self.model.get_layer_count())
+        self.set_layer_count(self.model.layer_count())
+        # Force update
+        self.on_slider_value_changed(0)
     
-    def render_layer(self, layer: int):
+    def render_layer(self, index: int):
         if self.model == None:
             return
+        
+        layer = self.model.get_layer(index)
 
         x_coords = []
         y_coords = []
         colors = []
 
-        if layer == 0:
+        if index == 0:
             x_coords.append(0.0)
             y_coords.append(0.0)
         else:
             found =  False
-            for feature in self.model.layers[layer - 1].features:
+            for feature in reversed(self.model.get_layer(index - 1).get_features()):
                 if found: break
 
-                for command in feature.commands:
-                    if found: break
-
-                    parts = command.split(" ")
-                    command_x: float = None
-                    command_y: float = None
-                    command_color: str = None
-
-                    for part in parts:
-                        if part.startswith("X"):
-                            command_x = float(part[1::])
-                        elif part.startswith("Y"):
-                            command_y = float(part[1::])
-                        elif part == "G1":
-                            command_color = "blue"
-                        elif part == "G0":
-                            command_color = "red"
-                    
-                    if command_x != None and command_y != None and command_color != None:
-                        x_coords.append(command_x)
-                        y_coords.append(command_y)
+                for command in reversed(feature.get_commands()):
+                    if command.is_move_command:
+                        x_coords.append(command.x)
+                        y_coords.append(command.y)
                         found = True
+                        break
 
-        for feature in self.model.layers[layer].features:
-            for command in feature.commands:
-                parts = command.split(" ")
-                command_x: float = None
-                command_y: float = None
-                command_color: str = None
+        for feature in layer.get_features():
+            for command in feature.get_commands():
+                if command.is_move_command:
+                    x_coords.append(command.x)
+                    y_coords.append(command.y)
+                    colors.append(command.color)
 
-                for part in parts:
-                    if part.startswith("X"):
-                        command_x = float(part[1::])
-                    elif part.startswith("Y"):
-                        command_y = float(part[1::])
-                    elif part == "G1":
-                        command_color = "blue"
-                    elif part == "G0":
-                        command_color = "red"
-                
-                if command_x != None and command_y != None and command_color != None:
-                    x_coords.append(command_x)
-                    y_coords.append(command_y)
-                    colors.append(command_color)
-        
         x_coords_array = np.array(x_coords)
         y_coords_array = np.array(y_coords)
         colors_array = np.array(colors)
