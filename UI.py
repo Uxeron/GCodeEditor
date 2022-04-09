@@ -2,7 +2,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
-from GCodeModel import Model, Layer, Child
+from GCodeModel import Model, Layer, Feature, Command, Child
 from io import TextIOWrapper
 import numpy as np
 
@@ -80,28 +80,51 @@ class MainWindow():
     ### ================ S I G N A L   F U N C T I O N S ================ ###
     
     def remove_selected_items(self) -> None:
-        selected_items = self.command_tree.selectedItems()
+        selected_items: list[ReferenceTreeWidgetItem] = self.command_tree.selectedItems()
         root = self.command_tree.invisibleRootItem()
 
         for item in selected_items:
+            item.model_reference.remove_from_parent()
             (item.parent() or root).removeChild(item)
+        
+        self.render_layer()
+
     
     def insert_new_item_under_selection(self) -> None:
         if len(self.command_tree.selectedItems()) == 0:
             return
 
         root = self.command_tree.invisibleRootItem()
-
-        new_item = QtWidgets.QTreeWidgetItem()
-        new_item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
         
-        selected_item = self.command_tree.selectedItems()[0]
-        parent = (selected_item.parent() or root)
+        selected_item: ReferenceTreeWidgetItem = self.command_tree.selectedItems()[0]
+        parent: ReferenceTreeWidgetItem = (selected_item.parent() or root)
         item_index = parent.indexOfChild(selected_item) + 1
+
+        new_item: ReferenceTreeWidgetItem
+
+        if isinstance(parent.model_reference, Feature):
+            command = parent.model_reference.insert_command("", item_index)
+            new_item = ReferenceTreeWidgetItem(None, command)
+        elif isinstance(parent.model_reference, Layer):
+            feature = Feature(parent.model_reference, "")
+            parent.model_reference.insert_feature(feature, item_index)
+            new_item = ReferenceTreeWidgetItem(None, feature)
+        elif isinstance(parent.model_reference, Model):
+            layer = Layer(parent.model_reference, "")
+            parent.model_reference.insert_layer(layer, item_index)
+            new_item = ReferenceTreeWidgetItem(None, layer)
+
+        new_item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
         parent.insertChild(item_index, new_item)
         self.command_tree.editItem(new_item)
 
-    def update_item(self, item: QtWidgets.QTreeWidgetItem) -> None:
+    def update_item(self, item: ReferenceTreeWidgetItem) -> None:
+        if self.model == None:
+            return
+
+        if isinstance(item.model_reference, Command):
+            item.model_reference.parse_command(item.text(0))
+
         if item.text(0).startswith("G0"):
             item.setForeground(0, self.COLORS["MAGENTA"])
         elif item.text(0).startswith("G1"):
@@ -112,8 +135,10 @@ class MainWindow():
             item.setForeground(0, self.COLORS["RED"])
         else:
             item.setForeground(0, self.COLORS["WHITE"])
+        
+        self.render_layer()
     
-    def on_item_expanded(self, item: QtWidgets.QTreeWidgetItem) -> None:
+    def on_item_expanded(self, item: ReferenceTreeWidgetItem) -> None:
         if not isinstance(item, LayerTreeItem):
             return
         
@@ -129,7 +154,7 @@ class MainWindow():
         self.slider_layer.setValue(current_layer)
         self.render_layer(current_layer)
     
-    def on_item_collapsed(self, item: QtWidgets.QTreeWidgetItem) -> None:
+    def on_item_collapsed(self, item: ReferenceTreeWidgetItem) -> None:
         if not isinstance(item, LayerTreeItem):
             return
         
@@ -216,9 +241,15 @@ class MainWindow():
         # Force update
         self.on_slider_value_changed(0)
     
-    def render_layer(self, index: int):
+    def render_layer(self, index: int = None):
         if self.model == None:
             return
+        
+        if index == None:
+            if self.open_layer_item == None:
+                return
+            
+            index = self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(self.open_layer_item)
         
         layer = self.model.get_layer(index)
 

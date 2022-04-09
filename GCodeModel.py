@@ -69,8 +69,15 @@ class Feature(Child, Parent):
         super().__init__(parent=parent)
         self.name = name
     
-    def add_command(self, command: str) -> None:
-        self.children.append(Command(self, command))
+    def add_command(self, command: str) -> Command:
+        child = Command(self, command)
+        self.children.append(child)
+        return child
+    
+    def insert_command(self, command: str, index: int) -> Command:
+        child = Command(self, command)
+        self.children.insert(index, child)
+        return child
     
     def get_command(self, index: int) -> Command:
         return self.children[index]
@@ -90,6 +97,9 @@ class Layer(Child, Parent):
     
     def add_feature(self, feature: Feature):
         self.children.append(feature)
+    
+    def insert_feature(self, feature: Feature, index: int):
+        self.children.insert(index, feature)
     
     def get_feature(self, index: int) -> Feature:
         return self.children[index]
@@ -112,6 +122,9 @@ class Model(Parent):
 
     def add_layer(self, layer: Layer) -> None:
         self.children.append(layer)
+    
+    def insert_layer(self, layer: Layer, index: int) -> None:
+        self.children.insert(index, layer)
     
     def get_layer(self, index: int) -> Layer:
         return self.children[index]
