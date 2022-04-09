@@ -30,6 +30,7 @@ class Command(Child):
     x: float
     y: float
     color: str
+    selected_color: str
 
     def __init__(self, parent: Feature, command: str) -> None:
         super().__init__(parent=parent)
@@ -46,8 +47,10 @@ class Command(Child):
         match command_parts[0]:
             case "G0":
                 self.color = "red"
+                self.selected_color = "cyan"
             case "G1":
                 self.color = "blue"
+                self.selected_color = "yellow"
             case _:
                 return # Not a move command, no need to continue parsing
 

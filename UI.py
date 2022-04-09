@@ -65,6 +65,8 @@ class MainWindow():
     printer_size_y: int = 210
     zoom: float = 0.0
 
+    selection_change_timer: QTimer
+
     COLORS = {
         "WHITE"  : QtGui.QBrush(QtGui.QColor("white")),
         "BLACK"  : QtGui.QBrush(QtGui.QColor("black")),
@@ -188,6 +190,12 @@ class MainWindow():
         with open(filename, "r") as file:
             self.parse_and_fill_model(file)
     
+    def on_selection_change(self):
+        self.selection_change_timer.start(100)
+
+    def on_selection_timer_timeout(self):
+        self.render_layer()
+    
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
     def add_tree_item(self, parent: QtWidgets.QWidget, modelItem: Child, text: str) -> ReferenceTreeWidgetItem:
@@ -253,6 +261,15 @@ class MainWindow():
         
         layer = self.model.get_layer(index)
 
+        selected_commands: dict[Command, int] = {}
+        for item in self.command_tree.selectedItems():
+            model_reference: Child = item.model_reference
+
+            if isinstance(model_reference, Command):
+                selected_commands[model_reference] = None
+            elif isinstance(model_reference, Feature):
+                selected_commands.update(dict.fromkeys(model_reference.get_commands(), None))
+
         x_coords = []
         y_coords = []
         colors = []
@@ -277,7 +294,10 @@ class MainWindow():
                 if command.is_move_command:
                     x_coords.append(command.x)
                     y_coords.append(command.y)
-                    colors.append(command.color)
+                    if command in selected_commands:
+                        colors.append(command.selected_color)
+                    else:
+                        colors.append(command.color)
 
         x_coords_array = np.array(x_coords)
         y_coords_array = np.array(y_coords)
@@ -425,6 +445,9 @@ class MainWindow():
         self.menu_file.addAction(self.action_file_saveas)
         menubar.addAction(self.menu_file.menuAction())
 
+        self.selection_change_timer = QTimer()
+        self.selection_change_timer.setSingleShot(True)
+
         self.button_remove.pressed.connect(self.remove_selected_items)
         self.button_insert.pressed.connect(self.insert_new_item_under_selection)
         self.button_down.pressed.connect(self.on_button_down_pressed)
@@ -436,6 +459,8 @@ class MainWindow():
         self.button_zoom_in.pressed.connect(self.on_button_zoom_in_pressed)
         self.button_zoom_out.pressed.connect(self.on_button_zoom_out_pressed)
         self.action_file_open.triggered.connect(self.open_file_dialog)
+        self.command_tree.itemSelectionChanged.connect(self.on_selection_change)
+        self.selection_change_timer.timeout.connect(self.on_selection_timer_timeout)
 
         self.main_window.show()
 
