@@ -14,11 +14,14 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
 
+RENDER_BG_COLOR: str = '0.2'
+RENDER_TEXT_COLOR: str = '0.8'
+
 class MplCanvas(FigureCanvasQTAgg):
     axes: Axes
 
     def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True)
+        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True, facecolor=RENDER_BG_COLOR)
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
 
@@ -331,6 +334,17 @@ class MainWindow():
         grid_layout = QtWidgets.QGridLayout(centralwidget)
 
         self.gcode_render = MplCanvas(self, width=5, height=5, dpi=100)
+
+        self.gcode_render.axes.set_facecolor(RENDER_BG_COLOR)
+        self.gcode_render.axes.xaxis.label.set_color(RENDER_TEXT_COLOR)
+        self.gcode_render.axes.yaxis.label.set_color(RENDER_TEXT_COLOR)
+        self.gcode_render.axes.tick_params(axis='x', colors=RENDER_TEXT_COLOR)
+        self.gcode_render.axes.tick_params(axis='y', colors=RENDER_TEXT_COLOR)
+        self.gcode_render.axes.spines['bottom'].set_color(RENDER_TEXT_COLOR)
+        self.gcode_render.axes.spines['top'].set_color(RENDER_TEXT_COLOR)
+        self.gcode_render.axes.spines['left'].set_color(RENDER_TEXT_COLOR)
+        self.gcode_render.axes.spines['right'].set_color(RENDER_TEXT_COLOR)
+
         self.gcode_render.axes.set_xlim([0, self.printer_size_x])
         self.gcode_render.axes.set_ylim([0, self.printer_size_y])
         self.gcode_render.axes.set_aspect('equal')

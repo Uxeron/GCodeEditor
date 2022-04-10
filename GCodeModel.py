@@ -47,10 +47,10 @@ class Command(Child):
         match command_parts[0]:
             case "G0":
                 self.color = "red"
-                self.selected_color = "cyan"
+                self.selected_color = "darkturquoise"
             case "G1":
-                self.color = "blue"
-                self.selected_color = "yellow"
+                self.color = "royalblue"
+                self.selected_color = "gold"
             case _:
                 return # Not a move command, no need to continue parsing
 
