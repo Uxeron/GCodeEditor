@@ -17,13 +17,15 @@ from matplotlib.collections import LineCollection
 RENDER_BG_COLOR: str = '0.2'
 RENDER_TEXT_COLOR: str = '0.8'
 
+
 class MplCanvas(FigureCanvasQTAgg):
     axes: Axes
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=5, height=4, dpi=100) -> None:
         fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True, facecolor=RENDER_BG_COLOR)
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
+
 
 class ReferenceTreeWidgetItem(QtWidgets.QTreeWidgetItem):
     model_reference: Child
@@ -32,9 +34,11 @@ class ReferenceTreeWidgetItem(QtWidgets.QTreeWidgetItem):
         super().__init__(parent)
         self.model_reference = model_reference
 
+
 class LayerTreeItem(ReferenceTreeWidgetItem):
     def __init__(self, parent, model_reference: Layer) -> None:
         super().__init__(parent, model_reference)
+
 
 class MainWindow():
     main_window: QtWidgets.QMainWindow
@@ -155,6 +159,10 @@ class MainWindow():
         
         self.open_layer_item = item
         self.command_tree.scrollToItem(item, QtWidgets.QAbstractItemView.ScrollHint.PositionAtTop)
+
+        if not isinstance(item.model_reference, Layer):
+            return
+
         current_layer = self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(item)
         self.slider_layer.setValue(current_layer)
         self.render_layer(current_layer)
@@ -213,12 +221,12 @@ class MainWindow():
         
         return item
     
-    def set_layer_count(self, count: int):
+    def set_layer_count(self, count: int) -> None:
         self.layer_count = count
         self.slider_layer.setMaximum(count - 1)
         self.slider_layer.setValue(0)
     
-    def update_render_zoom(self, zoom):
+    def update_render_zoom(self, zoom) -> None:
         if not 0.0 < zoom < 1.0:
             return
 
@@ -227,7 +235,7 @@ class MainWindow():
         self.gcode_render.axes.set_ylim([self.printer_size_y / 2.0 * self.zoom, self.printer_size_y - self.printer_size_y / 2.0 * self.zoom])
         self.gcode_render.draw()
     
-    def parse_and_fill_model(self, gcode_file: TextIOWrapper):
+    def parse_and_fill_model(self, gcode_file: TextIOWrapper) -> None:
         self.command_tree.clear()
         self.open_layer_item = None
 
@@ -252,7 +260,7 @@ class MainWindow():
         # Force update
         self.on_slider_value_changed(0)
     
-    def render_layer(self, index: int = None):
+    def render_layer(self, index: int = None) -> None:
         if self.model == None:
             return
         
@@ -319,7 +327,7 @@ class MainWindow():
         self.gcode_render.draw()
         self.update_render_zoom(self.zoom)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         self.main_window = QtWidgets.QMainWindow()
         self.main_window.setWindowTitle("GCode Editor")
         self.main_window.resize(1445, 1022)
@@ -479,7 +487,7 @@ class MainWindow():
         self.main_window.show()
 
 class DarkPalette(QPalette):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         self.setColor(QPalette.Window, QColor(53,53,53))

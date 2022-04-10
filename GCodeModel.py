@@ -155,31 +155,39 @@ class _GCodeParser:
     current_layer: Layer
     current_feature: Feature
 
-    def set_layer_count(self, count: str) -> None:
+    def set_layer_count(self, count: str, _) -> bool:
         self.layer_count = int(count)
+        return True
 
-    def start_layer(self, _) -> None:
+    def start_layer(self, _, __) -> bool:
         self.current_layer = Layer(self.parsed_model)
         self.current_feature = Feature(self.current_layer, "LAYER_START")
+        return True
     
-    def end_layer(self, _) -> None:
+    def end_layer(self, _, command) -> bool:
         self.current_layer.add_feature(self.current_feature)
         self.parsed_model.add_layer(self.current_layer)
-    
-    def start_feature(self, name: str) -> None:
-        if self.parsed_model.layer_count() == self.layer_count:
-            self.current_feature = self.parsed_model.feature_post_print
-            return
 
+        a = self.parsed_model.layer_count()
+        if self.parsed_model.layer_count() != self.layer_count:
+            return True
+        
+        self.current_feature.add_command(command)
+        self.current_feature = self.parsed_model.feature_post_print
+        return False
+
+    def start_feature(self, name: str, _) -> bool:
         # If we are already working with a feature, end it
         if self.current_feature != None:
             self.current_layer.add_feature(self.current_feature)
 
         self.current_feature = Feature(self.current_layer, name)
+        return True
     
-    def start_mesh(self, name: str) -> None:
+    def start_mesh(self, name: str, _) -> bool:
         if name == "NONMESH":
-            self.start_feature("LAYER_END")
+            self.start_feature("LAYER_END", None)
+        return True
 
     ANNOTATION_COMMANDS = {"LAYER_COUNT":set_layer_count, "LAYER":start_layer, "TIME_ELAPSED":end_layer, "TYPE":start_feature, "MESH":start_mesh}
 
@@ -197,8 +205,8 @@ class _GCodeParser:
         # Command comments
         annotation_command, annotation_value = line[1::].split(":")
         if annotation_command in self.ANNOTATION_COMMANDS:
-            self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value)
-        self.current_feature.add_command(line)
+            if self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value, line):
+                self.current_feature.add_command(line)
 
     def parse(self, gcode_file: TextIOWrapper) -> Model:
         self.parsed_model = Model()
