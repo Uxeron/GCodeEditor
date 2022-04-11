@@ -29,13 +29,14 @@ class MplCanvas(FigureCanvasQTAgg):
 
 class ReferenceTreeWidgetItem(QtWidgets.QTreeWidgetItem):
     model_reference: Child
+    children_populated: bool = False
 
     def __init__(self, parent, model_reference: Child) -> None:
         super().__init__(parent)
         self.model_reference = model_reference
 
 
-class LayerTreeItem(ReferenceTreeWidgetItem):
+class TopLevelTreeItem(ReferenceTreeWidgetItem):
     def __init__(self, parent, model_reference: Layer) -> None:
         super().__init__(parent, model_reference)
 
@@ -65,7 +66,7 @@ class MainWindow():
     action_file_save: QtWidgets.QAction
     action_file_saveas: QtWidgets.QAction
 
-    open_layer_item: LayerTreeItem
+    open_top_level_item: TopLevelTreeItem
     layer_count: int
 
     printer_size_x: int = 210
@@ -127,7 +128,7 @@ class MainWindow():
         parent.insertChild(item_index, new_item)
         self.command_tree.editItem(new_item)
 
-    def update_item(self, item: ReferenceTreeWidgetItem) -> None:
+    def update_item(self, item: ReferenceTreeWidgetItem, render: bool = True) -> None:
         if self.model == None:
             return
 
@@ -145,19 +146,36 @@ class MainWindow():
         else:
             item.setForeground(0, self.COLORS["WHITE"])
         
-        self.render_layer()
+        if render:
+            self.render_layer()
     
     def on_item_expanded(self, item: ReferenceTreeWidgetItem) -> None:
-        if not isinstance(item, LayerTreeItem):
+        if not item.children_populated:
+            # Remove the placeholder
+            placeholder = item.child(0)
+            item.removeChild(placeholder)
+
+            if isinstance(item.model_reference, Layer):
+                layer = item.model_reference
+                for feature in layer.get_features():
+                    self.add_tree_item(item, feature, feature.name)
+            elif isinstance(item.model_reference, Feature):
+                feature = item.model_reference
+                for command in feature.get_commands():
+                    self.add_tree_item(item, command, command.command)
+            
+            item.children_populated = True
+
+        if not isinstance(item, TopLevelTreeItem):
             return
         
-        if (item == self.open_layer_item):
+        if (item == self.open_top_level_item):
             return
         
-        if self.open_layer_item != None:
-            self.open_layer_item.setExpanded(False)
+        if self.open_top_level_item != None:
+            self.open_top_level_item.setExpanded(False)
         
-        self.open_layer_item = item
+        self.open_top_level_item = item
         self.command_tree.scrollToItem(item, QtWidgets.QAbstractItemView.ScrollHint.PositionAtTop)
 
         if not isinstance(item.model_reference, Layer):
@@ -168,12 +186,12 @@ class MainWindow():
         self.render_layer(current_layer)
     
     def on_item_collapsed(self, item: ReferenceTreeWidgetItem) -> None:
-        if not isinstance(item, LayerTreeItem):
+        if not isinstance(item, TopLevelTreeItem):
             return
         
-        if self.open_layer_item != None:
-            self.open_layer_item.setExpanded(False)
-            self.open_layer_item = None
+        if self.open_top_level_item != None:
+            self.open_top_level_item.setExpanded(False)
+            self.open_top_level_item = None
 
     def on_button_down_pressed(self):
         self.slider_layer.setValue(self.slider_layer.value() - 1)
@@ -209,15 +227,21 @@ class MainWindow():
     
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
-    def add_tree_item(self, parent: QtWidgets.QWidget, modelItem: Child, text: str) -> ReferenceTreeWidgetItem:
+    def add_tree_item(self, parent: QtWidgets.QTreeWidgetItem, model_item: Child, text: str) -> ReferenceTreeWidgetItem:
         item: ReferenceTreeWidgetItem
-        if parent == self.command_tree:
-            item = LayerTreeItem(parent, modelItem)
-        else:
-            item = ReferenceTreeWidgetItem(parent, modelItem)
+        if parent == self.command_tree.invisibleRootItem():
+            item = TopLevelTreeItem(None, model_item)
+        else: 
+            item = ReferenceTreeWidgetItem(None, model_item)
 
         item.setFlags(QtCore.Qt.ItemIsSelectable|QtCore.Qt.ItemIsEditable|QtCore.Qt.ItemIsEnabled)
         item.setText(0, text)
+        self.update_item(item, False)
+
+        parent.addChild(item)
+
+        if not isinstance(model_item, Command):
+            QtWidgets.QTreeWidgetItem(item) # Add placeholder to show an expand button
         
         return item
     
@@ -237,24 +261,14 @@ class MainWindow():
     
     def parse_and_fill_model(self, gcode_file: TextIOWrapper) -> None:
         self.command_tree.clear()
-        self.open_layer_item = None
+        self.open_top_level_item = None
 
         self.model = Model.parse_gcode(gcode_file)
 
-        post_print_layer_item = self.add_tree_item(self.command_tree, self.model.feature_post_print, "Post-Print")
-        for command in self.model.feature_post_print.get_commands():
-            self.add_tree_item(post_print_layer_item, command, command.command)
-
+        self.add_tree_item(self.command_tree.invisibleRootItem(), self.model.feature_post_print, "Post-Print")
         for index, layer in reversed(list(enumerate(self.model.get_layers()))):
-            layer_item = self.add_tree_item(self.command_tree, layer, "Layer " + str(index))
-            for feature in layer.get_features():
-                feature_item = self.add_tree_item(layer_item, feature, feature.name)
-                for command in feature.get_commands():
-                    self.add_tree_item(feature_item, command, command.command)
-
-        pre_print_layer_item = self.add_tree_item(self.command_tree, self.model.feature_pre_print, "Pre-Print")
-        for command in self.model.feature_pre_print.get_commands():
-            self.add_tree_item(pre_print_layer_item, command, command.command)
+            self.add_tree_item(self.command_tree.invisibleRootItem(), layer, "Layer " + str(index))
+        self.add_tree_item(self.command_tree.invisibleRootItem(), self.model.feature_pre_print, "Pre-Print")
         
         self.set_layer_count(self.model.layer_count())
         # Force update
@@ -265,10 +279,10 @@ class MainWindow():
             return
         
         if index == None:
-            if self.open_layer_item == None:
+            if self.open_top_level_item == None:
                 return
             
-            index = self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(self.open_layer_item)
+            index = self.layer_count - self.command_tree.invisibleRootItem().indexOfChild(self.open_top_level_item)
         
         layer = self.model.get_layer(index)
 
@@ -332,7 +346,7 @@ class MainWindow():
         self.main_window.setWindowTitle("GCode Editor")
         self.main_window.resize(1445, 1022)
 
-        self.open_layer_item = None
+        self.open_top_level_item = None
 
         for _, brush in self.COLORS.items():
             brush.setStyle(QtCore.Qt.SolidPattern)
