@@ -138,6 +138,9 @@ class Model(Parent):
     def layer_count(self) -> int:
         return len(self.children)
     
+    def export(self, output_file: TextIOWrapper) -> None:
+        _GcodeExporter.export_model(output_file, self)
+    
     def parse_gcode(gcode_file: TextIOWrapper) -> Model:
         parser = _GCodeParser()
         return parser.parse(gcode_file)
@@ -207,6 +210,8 @@ class _GCodeParser:
         if annotation_command in self.ANNOTATION_COMMANDS:
             if self.ANNOTATION_COMMANDS[annotation_command](self, annotation_value, line):
                 self.current_feature.add_command(line)
+        else:
+            self.current_feature.add_command(line)
 
     def parse(self, gcode_file: TextIOWrapper) -> Model:
         self.parsed_model = Model()
@@ -220,3 +225,12 @@ class _GCodeParser:
             gcode_line = gcode_file.readline()
         
         return self.parsed_model
+
+
+class _GcodeExporter:
+    def export_model(output_file: TextIOWrapper, model: Model) -> None:
+        output_file.writelines(command.command + '\n' for command in model.feature_pre_print.get_commands())
+        for layer in model.get_layers():
+            for feature in layer.get_features():
+                output_file.writelines(command.command + '\n' for command in feature.get_commands())
+        output_file.writelines(command.command + '\n' for command in model.feature_post_print.get_commands())

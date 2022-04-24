@@ -2,6 +2,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 
+import os.path
+
 from GCodeModel import Model, Layer, Feature, Command, Child
 from io import TextIOWrapper
 import numpy as np
@@ -14,7 +16,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
 
-RENDER_BG_COLOR: str = '0.2'
+RENDER_BG_COLOR: str = '0.208'
 RENDER_TEXT_COLOR: str = '0.8'
 
 
@@ -45,6 +47,7 @@ class MainWindow():
     main_window: QtWidgets.QMainWindow
 
     model: Model = None
+    open_file: str = None
     gcode_render: MplCanvas
     model_render_reference: LineCollection = None
 
@@ -210,15 +213,40 @@ class MainWindow():
     
     def open_file_dialog(self):
         options = QtWidgets.QFileDialog.Options()
-        options |= QtWidgets.QFileDialog.DontUseNativeDialog
-        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_window, "Select GCode", "","GCode Files (*.gcode);;All Files (*)", options=options)
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_window, "Open", "","GCode Files (*.gcode);;All Files (*)", options=options)
 
         if not filename:
             return
+
+        self.open_file = filename
+        self.main_window.setWindowTitle("GCode Editor - " + os.path.basename(filename))
         
         with open(filename, "r") as file:
             self.parse_and_fill_model(file)
     
+    def save_file(self):
+        if self.open_file == None:
+            return
+
+        with open(self.open_file, "w") as file:
+            self.model.export(file)
+    
+    def saveas_file_dialog(self):
+        if self.open_file == None:
+            return
+
+        options = QtWidgets.QFileDialog.Options()
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self.main_window, "Save As", "","GCode Files (*.gcode);;All Files (*)", options=options)
+
+        if not filename:
+            return
+
+        self.open_file = filename
+        self.main_window.setWindowTitle("GCode Editor - " + os.path.basename(filename))
+        
+        with open(filename, "w") as file:
+            self.model.export(file)
+
     def on_selection_change(self):
         self.selection_change_timer.start(100)
 
@@ -469,12 +497,15 @@ class MainWindow():
 
         self.action_file_open = QtWidgets.QAction(self.main_window)
         self.action_file_open.setText("Open...")
+        self.action_file_open.setShortcut("Ctrl+O")
 
         self.action_file_save = QtWidgets.QAction(self.main_window)
         self.action_file_save.setText("Save")
+        self.action_file_save.setShortcut("Ctrl+S")
 
         self.action_file_saveas = QtWidgets.QAction(self.main_window)
         self.action_file_saveas.setText("Save As...")
+        self.action_file_saveas.setShortcut("Ctrl+Shift+S")
 
         self.menu_file.addAction(self.action_file_open)
         self.menu_file.addAction(self.action_file_save)
@@ -495,6 +526,8 @@ class MainWindow():
         self.button_zoom_in.pressed.connect(self.on_button_zoom_in_pressed)
         self.button_zoom_out.pressed.connect(self.on_button_zoom_out_pressed)
         self.action_file_open.triggered.connect(self.open_file_dialog)
+        self.action_file_save.triggered.connect(self.save_file)
+        self.action_file_saveas.triggered.connect(self.saveas_file_dialog)
         self.command_tree.itemSelectionChanged.connect(self.on_selection_change)
         self.selection_change_timer.timeout.connect(self.on_selection_timer_timeout)
 
