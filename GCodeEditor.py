@@ -43,13 +43,14 @@ class TopLevelTreeItem(ReferenceTreeWidgetItem):
         super().__init__(parent, model_reference)
 
 
-class MainWindow():
-    main_window: QtWidgets.QMainWindow
-
+class MainWindow(QtWidgets.QMainWindow):
     model: Model = None
     open_file: str = None
     gcode_render: MplCanvas
     model_render_reference: LineCollection = None
+
+    splitter: QtWidgets.QSplitter
+    splitter_last_pos: int = 500
 
     command_tree: QtWidgets.QTreeWidget
 
@@ -213,13 +214,13 @@ class MainWindow():
     
     def open_file_dialog(self):
         options = QtWidgets.QFileDialog.Options()
-        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_window, "Open", "","GCode Files (*.gcode);;All Files (*)", options=options)
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open", "","GCode Files (*.gcode);;All Files (*)", options=options)
 
         if not filename:
             return
 
         self.open_file = filename
-        self.main_window.setWindowTitle("GCode Editor - " + os.path.basename(filename))
+        self.setWindowTitle("GCode Editor - " + os.path.basename(filename))
         
         with open(filename, "r") as file:
             self.parse_and_fill_model(file)
@@ -236,13 +237,13 @@ class MainWindow():
             return
 
         options = QtWidgets.QFileDialog.Options()
-        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self.main_window, "Save As", "","GCode Files (*.gcode);;All Files (*)", options=options)
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save As", "","GCode Files (*.gcode);;All Files (*)", options=options)
 
         if not filename:
             return
 
         self.open_file = filename
-        self.main_window.setWindowTitle("GCode Editor - " + os.path.basename(filename))
+        self.setWindowTitle("GCode Editor - " + os.path.basename(filename))
         
         with open(filename, "w") as file:
             self.model.export(file)
@@ -252,6 +253,13 @@ class MainWindow():
 
     def on_selection_timer_timeout(self):
         self.render_layer()
+    
+    def resizeEvent(self, e: QtGui.QResizeEvent):
+        self.splitter.setGeometry(self.centralWidget().rect())
+        self.splitter.moveSplitter(self.splitter_last_pos, 1)
+
+    def on_splitter_moved(self, pos: int, index: int) -> None:
+        self.splitter_last_pos = pos
     
     ### ================ P U B L I C   F U N C T I O N S ================ ###
 
@@ -362,26 +370,104 @@ class MainWindow():
         lc = LineCollection(segments, colors=colors_array)
 
         self.gcode_render.axes.cla()
-        self.gcode_render.axes.set_xlim([0, self.printer_size_x])
-        self.gcode_render.axes.set_ylim([0, self.printer_size_y])
+        self.gcode_render.axes.set_xlim([self.printer_size_x / 2.0 * self.zoom, self.printer_size_x - self.printer_size_x / 2.0 * self.zoom])
+        self.gcode_render.axes.set_ylim([self.printer_size_y / 2.0 * self.zoom, self.printer_size_y - self.printer_size_y / 2.0 * self.zoom])
         self.gcode_render.axes.set_aspect('equal')
         self.gcode_render.axes.add_collection(lc)
         self.gcode_render.draw()
-        self.update_render_zoom(self.zoom)
 
     def setup_ui(self) -> None:
-        self.main_window = QtWidgets.QMainWindow()
-        self.main_window.setWindowTitle("GCode Editor")
-        self.main_window.resize(1445, 1022)
+        self.setWindowTitle("GCode Editor")
+        self.setMinimumSize(840, 420)
 
         self.open_top_level_item = None
 
         for _, brush in self.COLORS.items():
             brush.setStyle(QtCore.Qt.SolidPattern)
 
-        centralwidget = QtWidgets.QWidget(self.main_window)
+        centralwidget = QtWidgets.QWidget(self)
 
-        grid_layout = QtWidgets.QGridLayout(centralwidget)
+        self.splitter = QtWidgets.QSplitter(centralwidget)
+        self.splitter.setOrientation(QtCore.Qt.Horizontal)
+
+        grid_layout_widget = QtWidgets.QWidget(self.splitter)
+        grid_layout = QtWidgets.QGridLayout(grid_layout_widget)
+
+        self.command_tree = QtWidgets.QTreeWidget(grid_layout_widget)
+        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.MinimumExpanding, QtWidgets.QSizePolicy.Expanding)
+        self.command_tree.setSizePolicy(size_policy)
+        self.command_tree.setMinimumSize(QtCore.QSize(300, 0))
+        self.command_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.command_tree.header().setVisible(False)
+
+        grid_layout.addWidget(self.command_tree, 0, 0, 2, 1)
+
+        horizontal_layout = QtWidgets.QHBoxLayout()
+
+        spacerItem = QtWidgets.QSpacerItem(250, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        horizontal_layout.addItem(spacerItem)
+
+        self.button_remove = QtWidgets.QPushButton(grid_layout_widget)
+        self.button_remove.setText("Remove")
+        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        size_policy.setHorizontalStretch(0)
+        size_policy.setVerticalStretch(0)
+        size_policy.setHeightForWidth(self.button_remove.sizePolicy().hasHeightForWidth())
+        self.button_remove.setSizePolicy(size_policy)
+        self.button_remove.setMinimumSize(QtCore.QSize(50, 50))
+        self.button_remove.setMaximumSize(QtCore.QSize(50, 50))
+        self.button_remove.setBaseSize(QtCore.QSize(50, 50))
+        horizontal_layout.addWidget(self.button_remove)
+
+        self.button_insert = QtWidgets.QPushButton(grid_layout_widget)
+        self.button_insert.setText("Insert")
+        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        size_policy.setHorizontalStretch(0)
+        size_policy.setVerticalStretch(0)
+        size_policy.setHeightForWidth(self.button_insert.sizePolicy().hasHeightForWidth())
+        self.button_insert.setSizePolicy(size_policy)
+        self.button_insert.setMinimumSize(QtCore.QSize(50, 50))
+        self.button_insert.setMaximumSize(QtCore.QSize(50, 50))
+        self.button_insert.setBaseSize(QtCore.QSize(50, 50))
+        horizontal_layout.addWidget(self.button_insert)
+        grid_layout.addLayout(horizontal_layout, 2, 0, 1, 1)
+
+
+        grid_layout_widget_2 = QtWidgets.QWidget(self.splitter)
+        grid_layout2 = QtWidgets.QGridLayout(grid_layout_widget_2)
+
+        vertical_layout_2 = QtWidgets.QVBoxLayout()
+
+        self.button_zoom_in = QtWidgets.QPushButton(grid_layout_widget_2)
+        self.button_zoom_in.setText("+")
+        self.button_zoom_in.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_zoom_in.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_zoom_in)
+
+        self.button_zoom_out = QtWidgets.QPushButton(grid_layout_widget_2)
+        self.button_zoom_out.setText("-")
+        self.button_zoom_out.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_zoom_out.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_zoom_out)
+
+        self.button_up = QtWidgets.QPushButton(grid_layout_widget_2)
+        self.button_up.setText("▲")
+        self.button_up.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_up.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_up)
+
+        self.slider_layer = QtWidgets.QSlider(QtCore.Qt.Vertical, grid_layout_widget_2)
+        self.slider_layer.setTickPosition(QtWidgets.QSlider.TicksAbove)
+        self.slider_layer.setMaximum(0)
+        vertical_layout_2.addWidget(self.slider_layer)
+
+        self.button_down = QtWidgets.QPushButton(grid_layout_widget_2)
+        self.button_down.setText("▼")
+        self.button_down.setMinimumSize(QtCore.QSize(30, 30))
+        self.button_down.setMaximumSize(QtCore.QSize(30, 30))
+        vertical_layout_2.addWidget(self.button_down)
+
+        grid_layout2.addLayout(vertical_layout_2, 0, 0, 2, 1)
 
         self.gcode_render = MplCanvas(self, width=5, height=5, dpi=100)
 
@@ -398,112 +484,29 @@ class MainWindow():
         self.gcode_render.axes.set_xlim([0, self.printer_size_x])
         self.gcode_render.axes.set_ylim([0, self.printer_size_y])
         self.gcode_render.axes.set_aspect('equal')
-        grid_layout.addWidget(self.gcode_render, 0, 2, 1, 1)
+        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.gcode_render.setSizePolicy(size_policy)
+        self.gcode_render.setMinimumSize(QtCore.QSize(400, 400))
+        grid_layout2.addWidget(self.gcode_render, 0, 1, 2, 1)
 
-        vertical_layout = QtWidgets.QVBoxLayout()
-        vertical_layout.setSpacing(0)
-        self.slider_end = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
-        self.slider_end.setTickPosition(QtWidgets.QSlider.TicksAbove)
-        self.slider_end.setMaximum(0)
-        vertical_layout.addWidget(self.slider_end)
+        self.setCentralWidget(centralwidget)
 
-        self.slider_start = QtWidgets.QSlider(QtCore.Qt.Horizontal, centralwidget)
-        self.slider_start.setInvertedAppearance(True)
-        self.slider_start.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider_start.setMaximum(0)
-        vertical_layout.addWidget(self.slider_start)
-
-        grid_layout.addLayout(vertical_layout, 2, 2, 1, 1)
-
-        self.command_tree = QtWidgets.QTreeWidget(centralwidget)
-        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
-        self.command_tree.setSizePolicy(size_policy)
-        self.command_tree.setMinimumSize(QtCore.QSize(400, 0))
-        self.command_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
-        self.command_tree.header().setVisible(False)
-
-        grid_layout.addWidget(self.command_tree, 0, 0, 2, 1)
-
-        horizontal_layout = QtWidgets.QHBoxLayout()
-
-        spacerItem = QtWidgets.QSpacerItem(250, 20, QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Minimum)
-        horizontal_layout.addItem(spacerItem)
-
-        self.button_remove = QtWidgets.QPushButton(centralwidget)
-        self.button_remove.setText("Remove")
-        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        size_policy.setHorizontalStretch(0)
-        size_policy.setVerticalStretch(0)
-        size_policy.setHeightForWidth(self.button_remove.sizePolicy().hasHeightForWidth())
-        self.button_remove.setSizePolicy(size_policy)
-        self.button_remove.setMinimumSize(QtCore.QSize(50, 50))
-        self.button_remove.setMaximumSize(QtCore.QSize(50, 50))
-        self.button_remove.setBaseSize(QtCore.QSize(50, 50))
-        horizontal_layout.addWidget(self.button_remove)
-
-        self.button_insert = QtWidgets.QPushButton(centralwidget)
-        self.button_insert.setText("Insert")
-        size_policy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        size_policy.setHorizontalStretch(0)
-        size_policy.setVerticalStretch(0)
-        size_policy.setHeightForWidth(self.button_insert.sizePolicy().hasHeightForWidth())
-        self.button_insert.setSizePolicy(size_policy)
-        self.button_insert.setMinimumSize(QtCore.QSize(50, 50))
-        self.button_insert.setMaximumSize(QtCore.QSize(50, 50))
-        self.button_insert.setBaseSize(QtCore.QSize(50, 50))
-        horizontal_layout.addWidget(self.button_insert)
-        grid_layout.addLayout(horizontal_layout, 2, 0, 1, 1)
-        vertical_layout_2 = QtWidgets.QVBoxLayout()
-
-        self.button_zoom_in = QtWidgets.QPushButton(centralwidget)
-        self.button_zoom_in.setText("+")
-        self.button_zoom_in.setMinimumSize(QtCore.QSize(30, 30))
-        self.button_zoom_in.setMaximumSize(QtCore.QSize(30, 30))
-        vertical_layout_2.addWidget(self.button_zoom_in)
-
-        self.button_zoom_out = QtWidgets.QPushButton(centralwidget)
-        self.button_zoom_out.setText("-")
-        self.button_zoom_out.setMinimumSize(QtCore.QSize(30, 30))
-        self.button_zoom_out.setMaximumSize(QtCore.QSize(30, 30))
-        vertical_layout_2.addWidget(self.button_zoom_out)
-
-        self.button_up = QtWidgets.QPushButton(centralwidget)
-        self.button_up.setText("▲")
-        self.button_up.setMinimumSize(QtCore.QSize(30, 30))
-        self.button_up.setMaximumSize(QtCore.QSize(30, 30))
-        vertical_layout_2.addWidget(self.button_up)
-
-        self.slider_layer = QtWidgets.QSlider(QtCore.Qt.Vertical, centralwidget)
-        self.slider_layer.setTickPosition(QtWidgets.QSlider.TicksAbove)
-        self.slider_layer.setMaximum(0)
-        vertical_layout_2.addWidget(self.slider_layer)
-
-        self.button_down = QtWidgets.QPushButton(centralwidget)
-        self.button_down.setText("▼")
-        self.button_down.setMinimumSize(QtCore.QSize(30, 30))
-        self.button_down.setMaximumSize(QtCore.QSize(30, 30))
-        vertical_layout_2.addWidget(self.button_down)
-
-        grid_layout.addLayout(vertical_layout_2, 0, 1, 1, 1)
-
-        self.main_window.setCentralWidget(centralwidget)
-
-        menubar = QtWidgets.QMenuBar(self.main_window)
+        menubar = QtWidgets.QMenuBar(self)
         menubar.setGeometry(QtCore.QRect(0, 0, 1445, 21))
 
         self.menu_file = QtWidgets.QMenu(menubar)
         self.menu_file.setTitle("File")
-        self.main_window.setMenuBar(menubar)
+        self.setMenuBar(menubar)
 
-        self.action_file_open = QtWidgets.QAction(self.main_window)
+        self.action_file_open = QtWidgets.QAction(self)
         self.action_file_open.setText("Open...")
         self.action_file_open.setShortcut("Ctrl+O")
 
-        self.action_file_save = QtWidgets.QAction(self.main_window)
+        self.action_file_save = QtWidgets.QAction(self)
         self.action_file_save.setText("Save")
         self.action_file_save.setShortcut("Ctrl+S")
 
-        self.action_file_saveas = QtWidgets.QAction(self.main_window)
+        self.action_file_saveas = QtWidgets.QAction(self)
         self.action_file_saveas.setText("Save As...")
         self.action_file_saveas.setShortcut("Ctrl+Shift+S")
 
@@ -530,8 +533,9 @@ class MainWindow():
         self.action_file_saveas.triggered.connect(self.saveas_file_dialog)
         self.command_tree.itemSelectionChanged.connect(self.on_selection_change)
         self.selection_change_timer.timeout.connect(self.on_selection_timer_timeout)
+        self.splitter.splitterMoved.connect(self.on_splitter_moved)
 
-        self.main_window.show()
+        self.show()
 
 class DarkPalette(QPalette):
     def __init__(self) -> None:
