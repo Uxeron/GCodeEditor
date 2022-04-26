@@ -70,10 +70,7 @@ class _Viewport:
         self._normalize_viewport_position()
 
     def move_center(self, delta_x: float, delta_y: float) -> None:
-        # TODO: Automatically adjust the delta based on the canvas size
-        self.set_center(
-            self._center_x + delta_x * (1.0 - self._zoom_level) * 0.4,
-            self._center_y + delta_y * (1.0 - self._zoom_level) * 0.4)
+        self.set_center(self._center_x + delta_x, self._center_y + delta_y)
     
     def _normalize_viewport_position(self) -> None:
         if self._center_x - (self._width / 2.0) < 0.0:
@@ -95,25 +92,26 @@ class MplCanvas(FigureCanvasQTAgg):
     canvas_size_y: int = 210
 
     is_panning: bool = False
-    panning_multiplier: float = 0.2
-    previous_pan_position_x: int
-    previous_pan_position_y: int
+    pan_position_x: int
+    pan_position_y: int
     viewport: _Viewport
 
-    def set_zoom(self, zoom_delta: float = None) -> None:
-        if zoom_delta != None:
-            self.viewport.change_zoom(zoom_delta)
+    def update_view(self) -> None:
         self.axes.set_xlim([self.viewport.get_x(), self.viewport.get_width()])
         self.axes.set_ylim([self.viewport.get_y(), self.viewport.get_height()])
         self.draw()
+
+    def set_zoom(self, zoom_delta: float) -> None:
+        self.viewport.change_zoom(zoom_delta)
+        self.update_view()
     
     def on_press(self, event):
         if not event.button == MouseButton.LEFT:
             return
 
         self.is_panning = True
-        self.previous_pan_position_x = event.x
-        self.previous_pan_position_y = event.y
+        self.pan_position_x = event.xdata
+        self.pan_position_y = event.ydata
 
     def on_release(self, event):
         if not event.button == MouseButton.LEFT:
@@ -127,16 +125,16 @@ class MplCanvas(FigureCanvasQTAgg):
         
         if not self.is_panning:
             return
+        
+        # If dragged outside the plot
+        if event.xdata == None or event.ydata == None:
+            return
 
-        delta_x = self.previous_pan_position_x - event.x
-        delta_y = self.previous_pan_position_y - event.y
+        delta_x = self.pan_position_x - event.xdata
+        delta_y = self.pan_position_y - event.ydata
 
         self.viewport.move_center(delta_x, delta_y)
-
-        self.previous_pan_position_x = event.x
-        self.previous_pan_position_y = event.y
-
-        self.set_zoom()
+        self.update_view()
 
     
     def render_layer(self, model: Model, index: int, selected_commands: dict[Command, int]) -> None:
@@ -182,7 +180,7 @@ class MplCanvas(FigureCanvasQTAgg):
         self.axes.cla()
         self.axes.set_aspect('equal')
         self.axes.add_collection(lc)
-        self.set_zoom()
+        self.update_view()
 
     def __init__(self, parent=None, width=5, height=4, dpi=100) -> None:
         fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True, facecolor=RENDER_BG_COLOR)
