@@ -96,6 +96,34 @@ class MplCanvas(FigureCanvasQTAgg):
     pan_position_y: int
     viewport: _Viewport
 
+    def __init__(self, parent=None, width=5, height=4, dpi=100) -> None:
+        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True, facecolor=RENDER_BG_COLOR)
+        self.axes = fig.add_subplot(111)
+
+        self.viewport = _Viewport(self.canvas_size_x, self.canvas_size_y)
+
+        super(MplCanvas, self).__init__(fig)
+        on_press_partial = partial(self.on_press)
+        on_release_partial = partial(self.on_release)
+        on_drag_partial = partial(self.on_drag)
+        self.mpl_connect('button_press_event', on_press_partial)
+        self.mpl_connect('button_release_event', on_release_partial)
+        self.mpl_connect('motion_notify_event', on_drag_partial)
+
+        self.axes.set_facecolor(RENDER_BG_COLOR)
+        self.axes.xaxis.label.set_color(RENDER_TEXT_COLOR)
+        self.axes.yaxis.label.set_color(RENDER_TEXT_COLOR)
+        self.axes.tick_params(axis='x', colors=RENDER_TEXT_COLOR)
+        self.axes.tick_params(axis='y', colors=RENDER_TEXT_COLOR)
+        self.axes.spines['bottom'].set_color(RENDER_TEXT_COLOR)
+        self.axes.spines['top'].set_color(RENDER_TEXT_COLOR)
+        self.axes.spines['left'].set_color(RENDER_TEXT_COLOR)
+        self.axes.spines['right'].set_color(RENDER_TEXT_COLOR)
+
+        self.axes.set_aspect('equal')
+        self.axes.set_xlim([0, self.canvas_size_x])
+        self.axes.set_ylim([0, self.canvas_size_y])
+
     def update_view(self) -> None:
         self.axes.set_xlim([self.viewport.get_x(), self.viewport.get_width()])
         self.axes.set_ylim([self.viewport.get_y(), self.viewport.get_height()])
@@ -181,31 +209,3 @@ class MplCanvas(FigureCanvasQTAgg):
         self.axes.set_aspect('equal')
         self.axes.add_collection(lc)
         self.update_view()
-
-    def __init__(self, parent=None, width=5, height=4, dpi=100) -> None:
-        fig = Figure(figsize=(width, height), dpi=dpi, tight_layout=True, facecolor=RENDER_BG_COLOR)
-        self.axes = fig.add_subplot(111)
-
-        self.viewport = _Viewport(self.canvas_size_x, self.canvas_size_y)
-
-        super(MplCanvas, self).__init__(fig)
-        on_press_partial = partial(self.on_press)
-        on_release_partial = partial(self.on_release)
-        on_drag_partial = partial(self.on_drag)
-        self.mpl_connect('button_press_event', on_press_partial)
-        self.mpl_connect('button_release_event', on_release_partial)
-        self.mpl_connect('motion_notify_event', on_drag_partial)
-
-        self.axes.set_facecolor(RENDER_BG_COLOR)
-        self.axes.xaxis.label.set_color(RENDER_TEXT_COLOR)
-        self.axes.yaxis.label.set_color(RENDER_TEXT_COLOR)
-        self.axes.tick_params(axis='x', colors=RENDER_TEXT_COLOR)
-        self.axes.tick_params(axis='y', colors=RENDER_TEXT_COLOR)
-        self.axes.spines['bottom'].set_color(RENDER_TEXT_COLOR)
-        self.axes.spines['top'].set_color(RENDER_TEXT_COLOR)
-        self.axes.spines['left'].set_color(RENDER_TEXT_COLOR)
-        self.axes.spines['right'].set_color(RENDER_TEXT_COLOR)
-
-        self.axes.set_aspect('equal')
-        self.axes.set_xlim([0, self.canvas_size_x])
-        self.axes.set_ylim([0, self.canvas_size_y])
