@@ -26,18 +26,17 @@ class Parent:
 
 class Command(Child):
     command: str
-    is_move_command: bool
-    x: float
-    y: float
+    is_move_command: bool = False
+    is_extrude_command: bool = False
+    x: float = None
+    y: float = None
+    e: float = None
+    f: float = None
     color: str
     selected_color: str
 
     def __init__(self, parent: Feature, command: str) -> None:
         super().__init__(parent=parent)
-        self.is_move_command = False
-        self.x = None
-        self.y = None
-
         self.parse_command(command)
 
     def parse_command(self, command: str) -> None:
@@ -60,9 +59,27 @@ class Command(Child):
                 self.x = float(part[1::])
             elif part.startswith("Y"):
                 self.y = float(part[1::])
+            elif part.startswith("E"):
+                self.e = float(part[1::])
+            elif part.startswith("F"):
+                self.f = float(part[1::])
         
         # Move command must have both X and Y parts
         self.is_move_command = (self.x != None and self.y != None)
+        self.is_extrude_command = self.e != None
+    
+    # Regenerate command string if this is a move command
+    def generate_command(self) -> None:
+        if not self.is_move_command:
+            return
+        
+        self.command = "G1" if self.is_extrude_command else "G0"
+        if self.f != None:
+            self.command += f" F{self.f:.1f}"
+        self.command += f" X{self.x:.3f}"
+        self.command += f" Y{self.y:.3f}"
+        if self.is_extrude_command:
+            self.command += f" E{self.e:.5f}"
 
 
 class Feature(Child, Parent):
@@ -117,6 +134,7 @@ class Layer(Child, Parent):
 class Model(Parent):
     feature_pre_print: Feature
     feature_post_print: Feature
+    layer_height: float = None
 
     def __init__(self) -> None:
         super().__init__()
@@ -191,8 +209,13 @@ class _GCodeParser:
         if name == "NONMESH":
             self.start_feature("LAYER_END", None)
         return True
+    
+    def set_layer_height(self, height: str, _) -> bool:
+        self.parsed_model.layer_height = float(height)
+        return True
 
-    ANNOTATION_COMMANDS = {"LAYER_COUNT":set_layer_count, "LAYER":start_layer, "TIME_ELAPSED":end_layer, "TYPE":start_feature, "MESH":start_mesh}
+    # These commands return a bool, whether this command should be added to commands list automatically (True) or not (False)
+    ANNOTATION_COMMANDS = {"LAYER_COUNT":set_layer_count, "LAYER":start_layer, "TIME_ELAPSED":end_layer, "TYPE":start_feature, "MESH":start_mesh, "Layer height":set_layer_height}
 
     def parse_line(self, line: str) -> None:
         # Commands

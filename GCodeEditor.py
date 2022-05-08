@@ -28,6 +28,9 @@ class MainWindow(QtWidgets.QMainWindow):
     open_file: str = None
     gcode_render: MplCanvas
 
+    extruder_width: float = 0.4
+    layer_height: float = 0.2
+
     splitter: QtWidgets.QSplitter
     splitter_last_pos: int = 500
 
@@ -48,6 +51,7 @@ class MainWindow(QtWidgets.QMainWindow):
     action_file_open: QtWidgets.QAction
     action_file_save: QtWidgets.QAction
     action_file_saveas: QtWidgets.QAction
+    action_recalculate_extrusion: QtWidgets.QAction
 
     open_top_level_item: TopLevelTreeItem
     layer_count: int
@@ -222,6 +226,49 @@ class MainWindow(QtWidgets.QMainWindow):
         
         with open(filename, "w") as file:
             self.model.export(file)
+    
+    def recalculate_extrusion(self):
+        if len(self.command_tree.selectedItems()) == 0:
+            return # TODO: Show an error?
+        
+        item: ReferenceTreeWidgetItem
+        for item in self.command_tree.selectedItems():
+            if not isinstance(item.model_reference, Command):
+                # TODO: Add support for selecting features and layers
+                continue
+            
+            item_command : Command = item.model_reference
+            previous_command : Command = None
+            # Find previous move command to know the distance traveled
+            found : bool = False
+            for layer in self.model.get_layers()[self.model.get_layers().index(item_command.parent.parent) :: -1]:
+                feature_index_start = layer.get_features().index(item_command.parent) if item_command.parent in layer.get_features() else -1
+                for feature in layer.get_features()[feature_index_start :: -1]:
+                    command_index_start = (feature.get_commands().index(item_command) if item_command in feature.get_commands() else 0) - 1
+                    for command in feature.get_commands()[command_index_start :: -1]:
+                        if command.is_move_command:
+                            found = True
+                            previous_command = command
+                            break
+                    if found:
+                        break
+                if found:
+                    break
+            
+            if previous_command == None:
+                # TODO: Show an error?
+                continue
+
+            def get_e(dist_x, dist_y, layer_height, extruder_width):
+                dist = (dist_x**2 + dist_y**2)**0.5
+                volume_flow = layer_height * extruder_width
+                return volume_flow * dist * 0.8 # Not sure what formula cura uses, but this is closer to it's calculations
+                # TODO: Improve formula
+            
+            item_command.e = get_e(item_command.x - previous_command.x, item_command.y - previous_command.y, self.layer_height, self.extruder_width)
+            item_command.generate_command()
+            item.setText(0, item_command.command)
+
 
     def on_selection_change(self):
         self.selection_change_timer.start(100)
@@ -273,6 +320,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_tree_item(self.command_tree.invisibleRootItem(), self.model.feature_pre_print, "Pre-Print")
         
         self.set_layer_count(self.model.layer_count())
+        self.layer_height = self.model.layer_height
         # Force update
         self.on_slider_value_changed(0)
     
@@ -422,6 +470,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.menu_file.addAction(self.action_file_saveas)
         menubar.addAction(self.menu_file.menuAction())
 
+        self.menu_functions = QtWidgets.QMenu(menubar)
+        self.menu_functions.setTitle("Functions")
+        self.setMenuBar(menubar)
+
+        self.action_recalculate_extrusion = QtWidgets.QAction(self)
+        self.action_recalculate_extrusion.setText("Recalculate extrusion")
+        self.action_recalculate_extrusion.setShortcut("Ctrl+R")
+
+        self.menu_functions.addAction(self.action_recalculate_extrusion)
+        menubar.addAction(self.menu_functions.menuAction())
+
         self.selection_change_timer = QTimer()
         self.selection_change_timer.setSingleShot(True)
 
@@ -438,6 +497,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.action_file_open.triggered.connect(self.open_file_dialog)
         self.action_file_save.triggered.connect(self.save_file)
         self.action_file_saveas.triggered.connect(self.saveas_file_dialog)
+        self.action_recalculate_extrusion.triggered.connect(self.recalculate_extrusion)
         self.command_tree.itemSelectionChanged.connect(self.on_selection_change)
         self.selection_change_timer.timeout.connect(self.on_selection_timer_timeout)
         self.splitter.splitterMoved.connect(self.on_splitter_moved)
